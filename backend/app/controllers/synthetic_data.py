@@ -4,7 +4,7 @@ from uuid import uuid4
 
 from app.schemas import SyntheticDataRequest, SyntheticDataResponse
 from app.services.data_source import CSVDataSource, DBDataSource, PDFDataSource
-from app.services.llm_service import OpenAILLMService, GeminiLLMService, CustomLLMService
+from app.services.llm_service import OpenAILLMService, GeminiLLMService, CustomLLMService, GroqLLMService
 
 from app.database import (
     LLMConfigRepository, DataSourceConfigRepository,
@@ -82,6 +82,8 @@ class SyntheticDataController:
                 llm = OpenAILLMService(llm_config)
             elif llm_type == "gemini":
                 llm = GeminiLLMService(llm_config)
+            elif llm_type == "groq":
+                llm = GroqLLMService(llm_config)
             elif llm_type == "custom":
                 llm = CustomLLMService(llm_config)
             else:

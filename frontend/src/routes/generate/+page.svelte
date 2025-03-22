@@ -14,6 +14,7 @@
   let settings = {
     openai_api_key: '',
     gemini_api_key: '',
+    groq_api_key: '',
     custom_api_key: '',
     custom_api_base_url: 'http://localhost:8000/v1',
     custom_model_name: 'custom-model',
@@ -45,7 +46,10 @@
       maxTokens: 1000,
       customEndpoint: '',
       apiKey: '',
-      modelName: 'custom-model'
+      modelName: 'custom-model',
+      topP: undefined as number | undefined,
+      topK: undefined as number | undefined,
+      apiBase: undefined as string | undefined
     },
     name: '',
     prompt: '',
@@ -100,6 +104,55 @@
       }
     } catch (err) {
       console.error('Error loading settings:', err);
+    }
+  }
+  
+  // Save settings to backend or local storage
+  async function saveSettings() {
+    try {
+      // Try to save to the backend API
+      try {
+        const response = await fetch('/api/v1/config/settings', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({
+            openai_api_key: settings.openai_api_key,
+            gemini_api_key: settings.gemini_api_key,
+            groq_api_key: settings.groq_api_key,
+            custom_api_key: settings.custom_api_key,
+            custom_api_base_url: settings.custom_api_base_url,
+            custom_model_name: settings.custom_model_name,
+            default_llm_provider: settings.default_llm_provider,
+            default_model: settings.default_model,
+            default_temperature: settings.default_temperature,
+            default_max_tokens: settings.default_max_tokens,
+            save_configurations: settings.save_configurations
+          })
+        });
+
+        if (response.ok) {
+          ToastManager.show('Settings saved successfully', 'success');
+          return;
+        }
+      } catch (apiError) {
+        console.warn('API not available, falling back to local storage:', apiError);
+      }
+
+      // Fall back to local storage if API fails
+      localStorage.setItem('hk_settings', JSON.stringify(settings));
+      ToastManager.show('Settings saved to local storage', 'success');
+    } catch (err) {
+      console.error('Error saving settings:', err);
+      ToastManager.show('Failed to save settings', 'error');
+    }
+  }
+
+  // Watch for settings changes and save them
+  $: {
+    if (settings.openai_api_key || settings.gemini_api_key || settings.groq_api_key || settings.custom_api_key) {
+      saveSettings();
     }
   }
   
@@ -315,11 +368,28 @@
         }
       };
       
+      // Add provider-specific parameters
+      if (formData.llmConfig.provider === 'gemini') {
+        if (formData.llmConfig.topP !== undefined) {
+          llmConfig.parameters.top_p = formData.llmConfig.topP;
+        }
+        if (formData.llmConfig.topK !== undefined) {
+          llmConfig.parameters.top_k = formData.llmConfig.topK;
+        }
+      } else if (formData.llmConfig.provider === 'groq') {
+        if (formData.llmConfig.topP !== undefined) {
+          llmConfig.parameters.top_p = formData.llmConfig.topP;
+        }
+      }
+      
       // Add API key based on provider
       if (formData.llmConfig.provider === 'openai') {
         llmConfig.api_key = settings.openai_api_key;
       } else if (formData.llmConfig.provider === 'gemini') {
         llmConfig.api_key = settings.gemini_api_key;
+      } else if (formData.llmConfig.provider === 'groq') {
+        llmConfig.api_key = settings.groq_api_key;
+        llmConfig.api_base = formData.llmConfig.apiBase || 'https://api.groq.com/openai/v1';
       } else if (formData.llmConfig.provider === 'custom') {
         llmConfig.api_key = formData.llmConfig.apiKey || settings.custom_api_key;
         // Add custom endpoint to parameters
@@ -380,7 +450,17 @@
   // LLM options
   const llmOptions = [
     { provider: 'openai', models: ['gpt-3.5-turbo', 'gpt-4', 'gpt-4-turbo'] },
-    { provider: 'gemini', models: ['gemini-pro', 'gemini-1.5-pro'] },
+    { provider: 'gemini', models: ['gemini-pro', 'gemini-1.5-pro'], parameters: ['temperature', 'max_tokens', 'top_p', 'top_k'] },
+    { 
+      provider: 'groq', 
+      models: [
+        'llama3-8b-8192', 
+        'llama3-70b-8192', 
+        'mixtral-8x7b-32768',
+        'gemma-7b-it',
+      ], 
+      parameters: ['temperature', 'max_tokens', 'top_p'] 
+    },
     { provider: 'custom', models: [] }
   ];
   
@@ -564,7 +644,7 @@
           </select>
         </div>
         
-        {#if formData.llmConfig.provider !== 'custom'}
+        {#if formData.llmConfig.provider === 'gemini'}
           <div class="mb-4">
             <label class="block text-secondary-700 mb-2">Model</label>
             <select bind:value={formData.llmConfig.model} class="input w-full">
@@ -573,29 +653,118 @@
               {/each}
             </select>
           </div>
-        {:else}
+          
+          <div class="mb-4">
+            <label class="block text-secondary-700 mb-2">API Key</label>
+            <input 
+              type="password" 
+              bind:value={settings.gemini_api_key} 
+              placeholder="Enter your Gemini API key" 
+              class="input w-full"
+            >
+            <p class="text-sm text-secondary-500 mt-1">Your API key will be securely stored in your settings</p>
+          </div>
+          
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div class="mb-4">
+              <label class="block text-secondary-700 mb-2">Temperature</label>
+              <input type="range" bind:value={formData.llmConfig.temperature} min="0" max="1" step="0.1" class="w-full">
+              <div class="flex justify-between">
+                <span class="text-sm">0 (Deterministic)</span>
+                <span class="text-sm font-medium">{formData.llmConfig.temperature}</span>
+                <span class="text-sm">1 (Creative)</span>
+              </div>
+            </div>
+            
+            <div class="mb-4">
+              <label class="block text-secondary-700 mb-2">Max Tokens</label>
+              <input type="number" bind:value={formData.llmConfig.maxTokens} min="100" max="8000" class="input w-full">
+            </div>
+            
+            <div class="mb-4">
+              <label class="block text-secondary-700 mb-2">Top P (Optional)</label>
+              <input type="range" bind:value={formData.llmConfig.topP} min="0" max="1" step="0.1" class="w-full">
+              <div class="flex justify-between">
+                <span class="text-sm">0</span>
+                <span class="text-sm font-medium">{formData.llmConfig.topP || 'Not set'}</span>
+                <span class="text-sm">1</span>
+              </div>
+            </div>
+            
+            <div class="mb-4">
+              <label class="block text-secondary-700 mb-2">Top K (Optional)</label>
+              <input type="number" bind:value={formData.llmConfig.topK} min="1" max="100" class="input w-full" placeholder="Optional">
+            </div>
+          </div>
+        {:else if formData.llmConfig.provider === 'groq'}
+          <div class="mb-4">
+            <label class="block text-secondary-700 mb-2">Model</label>
+            <select bind:value={formData.llmConfig.model} class="input w-full">
+              {#each llmOptions.find(o => o.provider === formData.llmConfig.provider)?.models || [] as model}
+                <option value={model}>{model}</option>
+              {/each}
+            </select>
+            <p class="text-sm text-secondary-500 mt-1">
+              Choose from Llama 3, Mixtral or Claude models offered by Groq.
+            </p>
+          </div>
+          
+          <div class="mb-4">
+            <label class="block text-secondary-700 mb-2">API Key</label>
+            <input 
+              type="password" 
+              bind:value={settings.groq_api_key} 
+              placeholder="Enter your Groq API key" 
+              class="input w-full"
+            >
+            <p class="text-sm text-secondary-500 mt-1">Your Groq API key will be securely stored in your settings</p>
+          </div>
+          
           <div class="mb-4">
             <label class="block text-secondary-700 mb-2">API Base URL</label>
-            <input type="text" bind:value={formData.llmConfig.customEndpoint} placeholder="http://localhost:8000/v1" class="input w-full">
-            <p class="text-sm text-secondary-500 mt-1">
-              The base URL for your custom LLM API (e.g., vLLM, llama.cpp, local server)
-            </p>
+            <input 
+              type="text" 
+              bind:value={formData.llmConfig.apiBase} 
+              placeholder="https://api.groq.com/openai/v1" 
+              class="input w-full"
+            >
+            <p class="text-sm text-secondary-500 mt-1">Default: https://api.groq.com/openai/v1</p>
           </div>
           
-          <div class="mb-4">
-            <label class="block text-secondary-700 mb-2">Model Name</label>
-            <input type="text" bind:value={formData.llmConfig.modelName} placeholder="custom-model" class="input w-full">
-            <p class="text-sm text-secondary-500 mt-1">
-              The name of the model to use with your custom LLM provider
-            </p>
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div class="mb-4">
+              <label class="block text-secondary-700 mb-2">Temperature</label>
+              <input type="range" bind:value={formData.llmConfig.temperature} min="0" max="1" step="0.1" class="w-full">
+              <div class="flex justify-between">
+                <span class="text-sm">0 (Deterministic)</span>
+                <span class="text-sm font-medium">{formData.llmConfig.temperature}</span>
+                <span class="text-sm">1 (Creative)</span>
+              </div>
+            </div>
+            
+            <div class="mb-4">
+              <label class="block text-secondary-700 mb-2">Max Tokens</label>
+              <input type="number" bind:value={formData.llmConfig.maxTokens} min="100" max="32000" class="input w-full">
+            </div>
+            
+            <div class="mb-4">
+              <label class="block text-secondary-700 mb-2">Top P (Optional)</label>
+              <input type="range" bind:value={formData.llmConfig.topP} min="0" max="1" step="0.1" class="w-full">
+              <div class="flex justify-between">
+                <span class="text-sm">0</span>
+                <span class="text-sm font-medium">{formData.llmConfig.topP || 'Not set'}</span>
+                <span class="text-sm">1</span>
+              </div>
+            </div>
           </div>
-          
+        {:else if formData.llmConfig.provider !== 'custom'}
           <div class="mb-4">
-            <label class="block text-secondary-700 mb-2">API Key (Optional)</label>
-            <input type="password" bind:value={formData.llmConfig.apiKey} placeholder="Your API key" class="input w-full">
-            <p class="text-sm text-secondary-500 mt-1">
-              Optional API key for your custom LLM service, if required
-            </p>
+            <label class="block text-secondary-700 mb-2">Model</label>
+            <select bind:value={formData.llmConfig.model} class="input w-full">
+              {#each llmOptions.find(o => o.provider === formData.llmConfig.provider)?.models || [] as model}
+                <option value={model}>{model}</option>
+              {/each}
+            </select>
           </div>
         {/if}
         

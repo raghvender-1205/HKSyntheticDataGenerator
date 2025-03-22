@@ -5,6 +5,7 @@
   let settings = {
     openai_api_key: '',
     gemini_api_key: '',
+    groq_api_key: '',
     custom_api_key: '',
     custom_api_base_url: 'http://localhost:8000/v1',
     custom_model_name: 'custom-model',
@@ -25,6 +26,18 @@
   const llmOptions = [
     { provider: 'openai', models: ['gpt-3.5-turbo', 'gpt-4', 'gpt-4-turbo'] },
     { provider: 'gemini', models: ['gemini-pro', 'gemini-1.5-pro'] },
+    { 
+      provider: 'groq', 
+      models: [
+        'llama3-8b-8192', 
+        'llama3-70b-8192', 
+        'mixtral-8x7b-32768',
+        'gemma-7b-it',
+        'claude-3-opus-20240229',
+        'claude-3-sonnet-20240229',
+        'claude-3-haiku-20240307'
+      ]
+    },
     { provider: 'custom', models: ['custom-model'] }
   ];
   
@@ -187,6 +200,20 @@
               />
               <p class="text-sm text-secondary-500 mt-1">
                 Used for Gemini models. Get your API key from the <a href="https://ai.google.dev/" target="_blank" rel="noopener noreferrer" class="text-primary-600 hover:underline">Google AI Studio</a>.
+              </p>
+            </div>
+            
+            <div>
+              <label for="groq_api_key" class="block text-secondary-700 mb-2">Groq API Key</label>
+              <input 
+                type="password" 
+                id="groq_api_key" 
+                bind:value={settings.groq_api_key} 
+                placeholder="Your API key" 
+                class="input w-full"
+              />
+              <p class="text-sm text-secondary-500 mt-1">
+                Used for Groq models. Get your API key from the Groq platform.
               </p>
             </div>
             

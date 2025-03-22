@@ -5,6 +5,7 @@ from enum import Enum
 class LLMType(str, Enum):
     OPENAI = "openai"
     GEMINI = "gemini"
+    GROQ = "groq"
     CUSTOM = "custom"
 
 class LLMConfig(BaseModel):
