@@ -13,3 +13,9 @@ langchain-community
 asyncpg
 pandas
 unstructured
+pytest
+pytest-asyncio
+pytest-cov
+httpx
+colorama
+aiohttp

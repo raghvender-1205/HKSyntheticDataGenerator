@@ -8,6 +8,9 @@ from app.services.base import BaseLLMService
 class CustomLLMService(BaseLLMService):
     def __init__(self, config: LLMConfig):
         super().__init__(config)
+        # Initialize parameters to empty dict if None
+        if self.config.parameters is None:
+            self.config.parameters = {}
         # Extract API base URL from parameters or use default
         self.api_base_url = self.config.parameters.get("api_base_url", "http://localhost:8000/v1")
         

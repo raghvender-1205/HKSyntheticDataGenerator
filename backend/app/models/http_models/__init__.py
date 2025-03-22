@@ -3,7 +3,7 @@ from .response import SyntheticDataResponse
 from .config import (
     LLMConfigResponse, LLMConfigCreateRequest, LLMConfigUpdateRequest,
     DataSourceConfigResponse, DataSourceConfigCreateRequest, DataSourceConfigUpdateRequest,
-    ConfigListResponse
+    ConfigListResponse, SavedGenerationConfig, SavedGenerationCreateRequest, SavedGenerationUpdateRequest
 )
 
 __all__ = [
@@ -15,5 +15,8 @@ __all__ = [
     "DataSourceConfigResponse", 
     "DataSourceConfigCreateRequest", 
     "DataSourceConfigUpdateRequest",
-    "ConfigListResponse"
+    "ConfigListResponse",
+    "SavedGenerationConfig",
+    "SavedGenerationCreateRequest",
+    "SavedGenerationUpdateRequest"
 ]

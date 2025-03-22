@@ -2,7 +2,7 @@ from pydantic import BaseModel
 from typing import Dict, List, Optional, Union
 from uuid import UUID, uuid4
 
-from app.models import LLMConfig, LLMType, DataSourceConfig
+from app.models import LLMConfig, LLMType, DataSourceConfig, DatasetType
 
 
 class LLMConfigResponse(BaseModel):
@@ -56,4 +56,34 @@ class DataSourceConfigUpdateRequest(BaseModel):
 class ConfigListResponse(BaseModel):
     """Response model for listing all configurations"""
     llm_configs: List[LLMConfigResponse]
-    data_source_configs: List[DataSourceConfigResponse] 
+    data_source_configs: List[DataSourceConfigResponse]
+
+
+class SavedGenerationConfig(BaseModel):
+    """Model for a saved generation configuration"""
+    id: UUID
+    name: str
+    llm_config_id: UUID
+    data_source_config_id: UUID
+    dataset_type: DatasetType
+    sample_size: int
+    created_at: str
+    last_used_at: Optional[str] = None
+
+
+class SavedGenerationCreateRequest(BaseModel):
+    """Request model for creating a saved generation configuration"""
+    name: str
+    llm_config_id: UUID
+    data_source_config_id: UUID
+    dataset_type: DatasetType
+    sample_size: int
+
+
+class SavedGenerationUpdateRequest(BaseModel):
+    """Request model for updating a saved generation configuration"""
+    name: Optional[str] = None
+    llm_config_id: Optional[UUID] = None
+    data_source_config_id: Optional[UUID] = None
+    dataset_type: Optional[DatasetType] = None
+    sample_size: Optional[int] = None 

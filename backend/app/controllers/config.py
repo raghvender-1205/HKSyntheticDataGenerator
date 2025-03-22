@@ -8,7 +8,8 @@ from app.models import LLMConfig, DataSourceConfig
 from app.models.http_models.config import (
     LLMConfigResponse, 
     DataSourceConfigResponse,
-    ConfigListResponse
+    ConfigListResponse,
+    SavedGenerationConfig
 )
 
 
@@ -18,6 +19,7 @@ class ConfigController:
     # In-memory storage for configurations (in a real app, use a database)
     _llm_configs: Dict[UUID, Dict] = {}
     _datasource_configs: Dict[UUID, Dict] = {}
+    _saved_generations: Dict[UUID, Dict] = {}
     
     @classmethod
     async def get_all_configs(cls) -> ConfigListResponse:
@@ -243,4 +245,114 @@ class ConfigController:
             first_key = next(iter(cls._datasource_configs))
             return DataSourceConfigResponse(**cls._datasource_configs[first_key])
         
-        return None 
+        return None
+        
+    @classmethod
+    async def get_all_saved_generations(cls) -> List[SavedGenerationConfig]:
+        """Get all saved generation configurations"""
+        return [SavedGenerationConfig(**config) for config in cls._saved_generations.values()]
+    
+    @classmethod
+    async def get_saved_generation(cls, config_id: UUID) -> SavedGenerationConfig:
+        """Get a saved generation configuration by ID"""
+        if config_id not in cls._saved_generations:
+            raise HTTPException(404, "Saved generation configuration not found")
+        
+        return SavedGenerationConfig(**cls._saved_generations[config_id])
+    
+    @classmethod
+    async def create_saved_generation(
+        cls,
+        name: str,
+        llm_config_id: UUID,
+        data_source_config_id: UUID,
+        dataset_type: str,
+        sample_size: int
+    ) -> SavedGenerationConfig:
+        """Create a new saved generation configuration"""
+        # Validate that the referenced configurations exist
+        if llm_config_id not in cls._llm_configs:
+            raise HTTPException(404, "LLM configuration not found")
+        
+        if data_source_config_id not in cls._datasource_configs:
+            raise HTTPException(404, "Data source configuration not found")
+        
+        # Generate a new UUID for the config
+        config_id = uuid4()
+        current_time = datetime.utcnow().isoformat()
+        
+        # Create the new config record
+        config_data = {
+            "id": config_id,
+            "name": name,
+            "llm_config_id": llm_config_id,
+            "data_source_config_id": data_source_config_id,
+            "dataset_type": dataset_type,
+            "sample_size": sample_size,
+            "created_at": current_time,
+            "last_used_at": None
+        }
+        
+        cls._saved_generations[config_id] = config_data
+        return SavedGenerationConfig(**config_data)
+    
+    @classmethod
+    async def update_saved_generation(
+        cls,
+        config_id: UUID,
+        name: Optional[str] = None,
+        llm_config_id: Optional[UUID] = None,
+        data_source_config_id: Optional[UUID] = None,
+        dataset_type: Optional[str] = None,
+        sample_size: Optional[int] = None
+    ) -> SavedGenerationConfig:
+        """Update an existing saved generation configuration"""
+        if config_id not in cls._saved_generations:
+            raise HTTPException(404, "Saved generation configuration not found")
+        
+        config_data = cls._saved_generations[config_id]
+        
+        # Update fields if provided
+        if name is not None:
+            config_data["name"] = name
+        
+        if llm_config_id is not None:
+            # Validate that the referenced configuration exists
+            if llm_config_id not in cls._llm_configs:
+                raise HTTPException(404, "LLM configuration not found")
+            config_data["llm_config_id"] = llm_config_id
+        
+        if data_source_config_id is not None:
+            # Validate that the referenced configuration exists
+            if data_source_config_id not in cls._datasource_configs:
+                raise HTTPException(404, "Data source configuration not found")
+            config_data["data_source_config_id"] = data_source_config_id
+        
+        if dataset_type is not None:
+            config_data["dataset_type"] = dataset_type
+        
+        if sample_size is not None:
+            config_data["sample_size"] = sample_size
+        
+        cls._saved_generations[config_id] = config_data
+        return SavedGenerationConfig(**config_data)
+    
+    @classmethod
+    async def delete_saved_generation(cls, config_id: UUID) -> None:
+        """Delete a saved generation configuration"""
+        if config_id not in cls._saved_generations:
+            raise HTTPException(404, "Saved generation configuration not found")
+        
+        # Delete the configuration
+        del cls._saved_generations[config_id]
+        
+    @classmethod
+    async def mark_config_as_used(cls, llm_id: UUID, datasource_id: UUID) -> None:
+        """Mark the LLM and data source configurations as last used"""
+        current_time = datetime.utcnow().isoformat()
+        
+        if llm_id in cls._llm_configs:
+            cls._llm_configs[llm_id]["last_used_at"] = current_time
+            
+        if datasource_id in cls._datasource_configs:
+            cls._datasource_configs[datasource_id]["last_used_at"] = current_time 

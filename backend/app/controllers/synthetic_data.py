@@ -3,7 +3,7 @@ from fastapi import HTTPException
 
 from app.models import SyntheticDataRequest, SyntheticDataResponse
 from app.services.data_source import CSVDataSource, DBDataSource, PDFDataSource
-from app.services.llm_service import OpenAILLMService, GeminiLLMService
+from app.services.llm_service import OpenAILLMService, GeminiLLMService, CustomLLMService
 
 
 class SyntheticDataController:
@@ -25,6 +25,8 @@ class SyntheticDataController:
                 llm = OpenAILLMService(request.llm_config)
             elif request.llm_config.type == "gemini":
                 llm = GeminiLLMService(request.llm_config)
+            elif request.llm_config.type == "custom":
+                llm = CustomLLMService(request.llm_config)
             else:
                 raise HTTPException(400, "Unsupported LLM type")
 
