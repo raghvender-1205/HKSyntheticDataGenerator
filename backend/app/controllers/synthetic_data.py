@@ -40,7 +40,7 @@ class SyntheticDataController:
                     "llm_type": request.llm_config.type,
                     "dataset_type": request.dataset_type
                 },
-                generated_at=datetime.utcnow().isoformat()
+                generated_str=datetime.utcnow().isoformat()
             )
         except Exception as e:
             raise HTTPException(500, f"Error generating synthetic data: {str(e)}")
