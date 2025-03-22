@@ -1,4 +1,8 @@
+.idea/
 *.csv
 .env
 __pycache__/
 **/__pycache__/
+backend/sample_pdfs/
+backend/.pytest_cache/
+backend/.coverage
