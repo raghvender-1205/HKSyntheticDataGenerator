@@ -24,8 +24,8 @@ class ConfigController:
     
     @staticmethod
     async def get_all_configs(
-        llm_repo: LLMConfigRepository = Depends(get_llm_config_repository),
-        datasource_repo: DataSourceConfigRepository = Depends(get_datasource_config_repository)
+        llm_repo: LLMConfigRepository,
+        datasource_repo: DataSourceConfigRepository
     ):
         """Get all available configurations"""
         try:
@@ -45,7 +45,7 @@ class ConfigController:
     @staticmethod
     async def get_llm_config(
         config_id: UUID,
-        llm_repo: LLMConfigRepository = Depends(get_llm_config_repository)
+        llm_repo: LLMConfigRepository
     ) -> LLMConfig:
         """Get an LLM configuration by ID"""
         try:
@@ -62,7 +62,7 @@ class ConfigController:
     @staticmethod
     async def create_llm_config(
         config: LLMConfigCreate,
-        llm_repo: LLMConfigRepository = Depends(get_llm_config_repository)
+        llm_repo: LLMConfigRepository
     ) -> LLMConfig:
         """Create a new LLM configuration"""
         try:
@@ -90,7 +90,7 @@ class ConfigController:
     async def update_llm_config(
         config_id: UUID,
         config: LLMConfigUpdate,
-        llm_repo: LLMConfigRepository = Depends(get_llm_config_repository)
+        llm_repo: LLMConfigRepository
     ) -> LLMConfig:
         """Update an existing LLM configuration"""
         try:
@@ -121,7 +121,7 @@ class ConfigController:
     @staticmethod
     async def delete_llm_config(
         config_id: UUID,
-        llm_repo: LLMConfigRepository = Depends(get_llm_config_repository)
+        llm_repo: LLMConfigRepository
     ) -> None:
         """Delete an LLM configuration"""
         try:
@@ -151,7 +151,7 @@ class ConfigController:
     
     @staticmethod
     async def get_default_llm_config(
-        llm_repo: LLMConfigRepository = Depends(get_llm_config_repository)
+        llm_repo: LLMConfigRepository
     ) -> Optional[LLMConfig]:
         """Get the default LLM configuration"""
         try:
@@ -173,7 +173,7 @@ class ConfigController:
     @staticmethod
     async def get_datasource_config(
         config_id: UUID,
-        datasource_repo: DataSourceConfigRepository = Depends(get_datasource_config_repository)
+        datasource_repo: DataSourceConfigRepository
     ) -> DataSourceConfig:
         """Get a data source configuration by ID"""
         try:
@@ -190,7 +190,7 @@ class ConfigController:
     @staticmethod
     async def create_datasource_config(
         config: DataSourceConfigCreate,
-        datasource_repo: DataSourceConfigRepository = Depends(get_datasource_config_repository)
+        datasource_repo: DataSourceConfigRepository
     ) -> DataSourceConfig:
         """Create a new data source configuration"""
         try:
@@ -218,7 +218,7 @@ class ConfigController:
     async def update_datasource_config(
         config_id: UUID,
         config: DataSourceConfigUpdate,
-        datasource_repo: DataSourceConfigRepository = Depends(get_datasource_config_repository)
+        datasource_repo: DataSourceConfigRepository
     ) -> DataSourceConfig:
         """Update an existing data source configuration"""
         try:
@@ -249,7 +249,7 @@ class ConfigController:
     @staticmethod
     async def delete_datasource_config(
         config_id: UUID,
-        datasource_repo: DataSourceConfigRepository = Depends(get_datasource_config_repository)
+        datasource_repo: DataSourceConfigRepository
     ) -> None:
         """Delete a data source configuration"""
         try:
@@ -279,7 +279,7 @@ class ConfigController:
     
     @staticmethod
     async def get_default_datasource_config(
-        datasource_repo: DataSourceConfigRepository = Depends(get_datasource_config_repository)
+        datasource_repo: DataSourceConfigRepository
     ) -> Optional[DataSourceConfig]:
         """Get the default data source configuration"""
         try:
@@ -300,7 +300,7 @@ class ConfigController:
     
     @staticmethod
     async def get_all_saved_generations(
-        saved_repo: SavedGenerationRepository = Depends(get_saved_generation_repository)
+        saved_repo: SavedGenerationRepository
     ) -> List[SavedGeneration]:
         """Get all saved generation configurations"""
         try:
@@ -314,7 +314,7 @@ class ConfigController:
     @staticmethod
     async def get_saved_generation(
         config_id: UUID,
-        saved_repo: SavedGenerationRepository = Depends(get_saved_generation_repository)
+        saved_repo: SavedGenerationRepository
     ) -> SavedGeneration:
         """Get a saved generation configuration by ID"""
         try:
@@ -331,9 +331,9 @@ class ConfigController:
     @staticmethod
     async def create_saved_generation(
         config: SavedGenerationCreate,
-        saved_repo: SavedGenerationRepository = Depends(get_saved_generation_repository),
-        llm_repo: LLMConfigRepository = Depends(get_llm_config_repository),
-        datasource_repo: DataSourceConfigRepository = Depends(get_datasource_config_repository)
+        saved_repo: SavedGenerationRepository,
+        llm_repo: LLMConfigRepository,
+        datasource_repo: DataSourceConfigRepository
     ) -> SavedGeneration:
         """Create a new saved generation"""
         try:
@@ -360,7 +360,7 @@ class ConfigController:
     async def update_saved_generation(
         config_id: UUID,
         config: SavedGenerationUpdate,
-        saved_repo: SavedGenerationRepository = Depends(get_saved_generation_repository)
+        saved_repo: SavedGenerationRepository
     ) -> SavedGeneration:
         """Update an existing saved generation"""
         try:
@@ -383,7 +383,7 @@ class ConfigController:
     @staticmethod
     async def delete_saved_generation(
         config_id: UUID,
-        saved_repo: SavedGenerationRepository = Depends(get_saved_generation_repository)
+        saved_repo: SavedGenerationRepository
     ) -> None:
         """Delete a saved generation"""
         try:
@@ -404,8 +404,8 @@ class ConfigController:
     async def mark_config_as_used(
         llm_id: UUID,
         datasource_id: UUID,
-        llm_repo: LLMConfigRepository = Depends(get_llm_config_repository),
-        datasource_repo: DataSourceConfigRepository = Depends(get_datasource_config_repository)
+        llm_repo: LLMConfigRepository,
+        datasource_repo: DataSourceConfigRepository
     ) -> None:
         """Mark the LLM and data source configurations as last used"""
         try:
@@ -419,4 +419,67 @@ class ConfigController:
         except SQLAlchemyError as e:
             # Don't fail the request if marking as used fails
             # Just log the error
-            print(f"Error marking configs as used: {str(e)}") 
+            print(f"Error marking configs as used: {str(e)}")
+            
+    @staticmethod
+    async def get_all_settings(
+        settings_repo: SettingsRepository
+    ) -> dict:
+        """Get all application settings"""
+        try:
+            # Get all settings
+            settings_models = await settings_repo.get_all()
+            
+            # Convert to a dictionary
+            settings_dict = {}
+            for setting in settings_models:
+                settings_dict[setting.name] = setting.value
+            
+            # If no settings are found, return default settings
+            if not settings_dict:
+                settings_dict = {
+                    "theme": "light",
+                    "language": "en",
+                    "notifications_enabled": True,
+                    "api_keys": {
+                        "openai": "",
+                        "gemini": ""
+                    }
+                }
+                
+                # Save default settings
+                for name, value in settings_dict.items():
+                    await settings_repo.create(name=name, value=value)
+            
+            return settings_dict
+        except SQLAlchemyError as e:
+            raise HTTPException(
+                status_code=500,
+                detail=f"Database error retrieving settings: {str(e)}"
+            )
+    
+    @staticmethod
+    async def update_settings(
+        settings: dict,
+        settings_repo: SettingsRepository
+    ) -> dict:
+        """Update application settings"""
+        try:
+            # Update each setting
+            for name, value in settings.items():
+                # Check if setting exists
+                setting = await settings_repo.get_by_name(name)
+                if setting:
+                    # Update existing setting
+                    await settings_repo.update(str(setting.id), value=value)
+                else:
+                    # Create new setting
+                    await settings_repo.create(name=name, value=value)
+            
+            # Return updated settings
+            return await ConfigController.get_all_settings(settings_repo)
+        except SQLAlchemyError as e:
+            raise HTTPException(
+                status_code=500,
+                detail=f"Database error updating settings: {str(e)}"
+            ) 

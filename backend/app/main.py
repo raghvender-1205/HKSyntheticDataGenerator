@@ -12,6 +12,11 @@ from app.schemas import (
     GenerationRequest, GenerationResponse,
     SyntheticDataRequest, SyntheticDataResponse, DatasetType
 )
+from app.database import (
+    LLMConfigRepository, DataSourceConfigRepository, SavedGenerationRepository,
+    get_llm_config_repository, get_datasource_config_repository, get_saved_generation_repository,
+    SettingsRepository, get_settings_repository
+)
 
 
 app = FastAPI(
@@ -33,7 +38,12 @@ async def global_exception_handler(request, e: Exception):
     summary="Generate Synthetic data",
     description="Generate synthetic datasets from configured data sources"
 )
-async def generate_data(request: SyntheticDataRequest):
+async def generate_data(
+    request: SyntheticDataRequest,
+    llm_repo: LLMConfigRepository = Depends(get_llm_config_repository),
+    datasource_repo: DataSourceConfigRepository = Depends(get_datasource_config_repository),
+    saved_repo: SavedGenerationRepository = Depends(get_saved_generation_repository)
+):
     """
     Generate Synthetic Data based on the provided configuration
     :param request: contains data_source, llm config
@@ -41,14 +51,18 @@ async def generate_data(request: SyntheticDataRequest):
     """
     try:
         # logger.info(f"Recieved request: {request.dict()}")
-        response = await SyntheticDataController.generate_synthetic_data(request)
+        response = await SyntheticDataController.generate_synthetic_data(
+            request, llm_repo, datasource_repo, saved_repo
+        )
         # logger.info(f"Successfully generated {request.sample_size} samples")
 
         # Mark the configurations as used if IDs are provided
         if request.llm_config_id and request.datasource_config_id:
             await ConfigController.mark_config_as_used(
                 request.llm_config_id,
-                request.datasource_config_id
+                request.datasource_config_id,
+                llm_repo,
+                datasource_repo
             )
 
         return response
@@ -71,9 +85,12 @@ async def generate_data(request: SyntheticDataRequest):
     summary="Get all LLM configurations",
     description="Returns all saved LLM configurations"
 )
-async def get_all_llm_configs():
+async def get_all_llm_configs(
+    llm_repo: LLMConfigRepository = Depends(get_llm_config_repository),
+    datasource_repo: DataSourceConfigRepository = Depends(get_datasource_config_repository)
+):
     """Get all LLM configurations"""
-    configs = await ConfigController.get_all_configs()
+    configs = await ConfigController.get_all_configs(llm_repo, datasource_repo)
     return configs["llm_configs"]
 
 @app.get(
@@ -82,9 +99,11 @@ async def get_all_llm_configs():
     summary="Get default LLM configuration",
     description="Returns the default LLM configuration"
 )
-async def get_default_llm_config():
+async def get_default_llm_config(
+    llm_repo: LLMConfigRepository = Depends(get_llm_config_repository)
+):
     """Get the default LLM configuration"""
-    config = await ConfigController.get_default_llm_config()
+    config = await ConfigController.get_default_llm_config(llm_repo)
     if not config:
         raise HTTPException(404, "No default LLM configuration found")
     return config
@@ -95,9 +114,12 @@ async def get_default_llm_config():
     summary="Get an LLM configuration",
     description="Returns a specific LLM configuration by ID"
 )
-async def get_llm_config(config_id: UUID):
+async def get_llm_config(
+    config_id: UUID,
+    llm_repo: LLMConfigRepository = Depends(get_llm_config_repository)
+):
     """Get an LLM configuration by ID"""
-    return await ConfigController.get_llm_config(config_id)
+    return await ConfigController.get_llm_config(config_id, llm_repo)
 
 @app.post(
     "/api/v1/config/llm",
@@ -105,9 +127,12 @@ async def get_llm_config(config_id: UUID):
     summary="Create an LLM configuration",
     description="Creates a new LLM configuration"
 )
-async def create_llm_config(request: LLMConfigCreate):
+async def create_llm_config(
+    request: LLMConfigCreate,
+    llm_repo: LLMConfigRepository = Depends(get_llm_config_repository)
+):
     """Create a new LLM configuration"""
-    return await ConfigController.create_llm_config(request)
+    return await ConfigController.create_llm_config(request, llm_repo)
 
 @app.put(
     "/api/v1/config/llm/{config_id}",
@@ -115,18 +140,25 @@ async def create_llm_config(request: LLMConfigCreate):
     summary="Update an LLM configuration",
     description="Updates an existing LLM configuration"
 )
-async def update_llm_config(config_id: UUID, request: LLMConfigUpdate):
+async def update_llm_config(
+    config_id: UUID, 
+    request: LLMConfigUpdate,
+    llm_repo: LLMConfigRepository = Depends(get_llm_config_repository)
+):
     """Update an existing LLM configuration"""
-    return await ConfigController.update_llm_config(config_id, request)
+    return await ConfigController.update_llm_config(config_id, request, llm_repo)
 
 @app.delete(
     "/api/v1/config/llm/{config_id}",
     summary="Delete an LLM configuration",
     description="Deletes an existing LLM configuration"
 )
-async def delete_llm_config(config_id: UUID):
+async def delete_llm_config(
+    config_id: UUID,
+    llm_repo: LLMConfigRepository = Depends(get_llm_config_repository)
+):
     """Delete an LLM configuration"""
-    await ConfigController.delete_llm_config(config_id)
+    await ConfigController.delete_llm_config(config_id, llm_repo)
     return {"status": "success", "message": f"LLM configuration {config_id} deleted"}
 
 # Data Source Configuration Routes
@@ -136,9 +168,12 @@ async def delete_llm_config(config_id: UUID):
     summary="Get all data source configurations",
     description="Returns all saved data source configurations"
 )
-async def get_all_datasource_configs():
+async def get_all_datasource_configs(
+    llm_repo: LLMConfigRepository = Depends(get_llm_config_repository),
+    datasource_repo: DataSourceConfigRepository = Depends(get_datasource_config_repository)
+):
     """Get all data source configurations"""
-    configs = await ConfigController.get_all_configs()
+    configs = await ConfigController.get_all_configs(llm_repo, datasource_repo)
     return configs["data_source_configs"]
 
 @app.get(
@@ -147,9 +182,11 @@ async def get_all_datasource_configs():
     summary="Get default data source configuration",
     description="Returns the default data source configuration"
 )
-async def get_default_datasource_config():
+async def get_default_datasource_config(
+    datasource_repo: DataSourceConfigRepository = Depends(get_datasource_config_repository)
+):
     """Get the default data source configuration"""
-    config = await ConfigController.get_default_datasource_config()
+    config = await ConfigController.get_default_datasource_config(datasource_repo)
     if not config:
         raise HTTPException(404, "No default data source configuration found")
     return config
@@ -160,9 +197,12 @@ async def get_default_datasource_config():
     summary="Get a data source configuration",
     description="Returns a specific data source configuration by ID"
 )
-async def get_datasource_config(config_id: UUID):
+async def get_datasource_config(
+    config_id: UUID,
+    datasource_repo: DataSourceConfigRepository = Depends(get_datasource_config_repository)
+):
     """Get a data source configuration by ID"""
-    return await ConfigController.get_datasource_config(config_id)
+    return await ConfigController.get_datasource_config(config_id, datasource_repo)
 
 @app.post(
     "/api/v1/config/datasource",
@@ -170,9 +210,12 @@ async def get_datasource_config(config_id: UUID):
     summary="Create a data source configuration",
     description="Creates a new data source configuration"
 )
-async def create_datasource_config(request: DataSourceConfigCreate):
+async def create_datasource_config(
+    request: DataSourceConfigCreate,
+    datasource_repo: DataSourceConfigRepository = Depends(get_datasource_config_repository)
+):
     """Create a new data source configuration"""
-    return await ConfigController.create_datasource_config(request)
+    return await ConfigController.create_datasource_config(request, datasource_repo)
 
 @app.put(
     "/api/v1/config/datasource/{config_id}",
@@ -180,18 +223,25 @@ async def create_datasource_config(request: DataSourceConfigCreate):
     summary="Update a data source configuration",
     description="Updates an existing data source configuration"
 )
-async def update_datasource_config(config_id: UUID, request: DataSourceConfigUpdate):
+async def update_datasource_config(
+    config_id: UUID, 
+    request: DataSourceConfigUpdate,
+    datasource_repo: DataSourceConfigRepository = Depends(get_datasource_config_repository)
+):
     """Update an existing data source configuration"""
-    return await ConfigController.update_datasource_config(config_id, request)
+    return await ConfigController.update_datasource_config(config_id, request, datasource_repo)
 
 @app.delete(
     "/api/v1/config/datasource/{config_id}",
     summary="Delete a data source configuration",
     description="Deletes an existing data source configuration"
 )
-async def delete_datasource_config(config_id: UUID):
+async def delete_datasource_config(
+    config_id: UUID,
+    datasource_repo: DataSourceConfigRepository = Depends(get_datasource_config_repository)
+):
     """Delete a data source configuration"""
-    await ConfigController.delete_datasource_config(config_id)
+    await ConfigController.delete_datasource_config(config_id, datasource_repo)
     return {"status": "success", "message": f"Data source configuration {config_id} deleted"}
 
 # Saved Generation Configuration Routes
@@ -201,9 +251,11 @@ async def delete_datasource_config(config_id: UUID):
     summary="Get all saved generation configurations",
     description="Returns all saved generation configurations"
 )
-async def get_all_saved_generations():
+async def get_all_saved_generations(
+    saved_repo: SavedGenerationRepository = Depends(get_saved_generation_repository)
+):
     """Get all saved generation configurations"""
-    return await ConfigController.get_all_saved_generations()
+    return await ConfigController.get_all_saved_generations(saved_repo)
 
 @app.get(
     "/api/v1/config/saved/{config_id}",
@@ -211,9 +263,12 @@ async def get_all_saved_generations():
     summary="Get a saved generation configuration",
     description="Returns a specific saved generation configuration by ID"
 )
-async def get_saved_generation(config_id: UUID):
+async def get_saved_generation(
+    config_id: UUID,
+    saved_repo: SavedGenerationRepository = Depends(get_saved_generation_repository)
+):
     """Get a saved generation configuration by ID"""
-    return await ConfigController.get_saved_generation(config_id)
+    return await ConfigController.get_saved_generation(config_id, saved_repo)
 
 @app.post(
     "/api/v1/config/saved",
@@ -221,9 +276,14 @@ async def get_saved_generation(config_id: UUID):
     summary="Create a saved generation configuration",
     description="Creates a new saved generation configuration"
 )
-async def create_saved_generation(request: SavedGenerationCreate):
+async def create_saved_generation(
+    request: SavedGenerationCreate,
+    saved_repo: SavedGenerationRepository = Depends(get_saved_generation_repository),
+    llm_repo: LLMConfigRepository = Depends(get_llm_config_repository),
+    datasource_repo: DataSourceConfigRepository = Depends(get_datasource_config_repository)
+):
     """Create a new saved generation configuration"""
-    return await ConfigController.create_saved_generation(request)
+    return await ConfigController.create_saved_generation(request, saved_repo, llm_repo, datasource_repo)
 
 @app.put(
     "/api/v1/config/saved/{config_id}",
@@ -231,18 +291,25 @@ async def create_saved_generation(request: SavedGenerationCreate):
     summary="Update a saved generation configuration",
     description="Updates an existing saved generation configuration"
 )
-async def update_saved_generation(config_id: UUID, request: SavedGenerationUpdate):
+async def update_saved_generation(
+    config_id: UUID, 
+    request: SavedGenerationUpdate,
+    saved_repo: SavedGenerationRepository = Depends(get_saved_generation_repository)
+):
     """Update an existing saved generation configuration"""
-    return await ConfigController.update_saved_generation(config_id, request)
+    return await ConfigController.update_saved_generation(config_id, request, saved_repo)
 
 @app.delete(
     "/api/v1/config/saved/{config_id}",
     summary="Delete a saved generation configuration",
     description="Deletes an existing saved generation configuration"
 )
-async def delete_saved_generation(config_id: UUID):
+async def delete_saved_generation(
+    config_id: UUID,
+    saved_repo: SavedGenerationRepository = Depends(get_saved_generation_repository)
+):
     """Delete a saved generation configuration"""
-    await ConfigController.delete_saved_generation(config_id)
+    await ConfigController.delete_saved_generation(config_id, saved_repo)
     return {"status": "success", "message": f"Saved generation configuration {config_id} deleted"}
 
 # Combined Configuration Route
@@ -251,9 +318,40 @@ async def delete_saved_generation(config_id: UUID):
     summary="Get all configurations",
     description="Returns all configurations (LLM and data source)"
 )
-async def get_all_configs():
+async def get_all_configs(
+    llm_repo: LLMConfigRepository = Depends(get_llm_config_repository),
+    datasource_repo: DataSourceConfigRepository = Depends(get_datasource_config_repository)
+):
     """Get all configurations"""
-    return await ConfigController.get_all_configs()
+    return await ConfigController.get_all_configs(llm_repo, datasource_repo)
+
+# Application Settings
+@app.get(
+    "/api/v1/config/settings",
+    response_model=dict,
+    summary="Get application settings",
+    description="Returns all application settings"
+)
+async def get_settings(
+    settings_repo: SettingsRepository = Depends(get_settings_repository)
+):
+    """Get all application settings"""
+    settings = await ConfigController.get_all_settings(settings_repo)
+    return settings
+
+@app.post(
+    "/api/v1/config/settings",
+    response_model=dict,
+    summary="Update application settings",
+    description="Updates application settings"
+)
+async def update_settings(
+    settings: dict,
+    settings_repo: SettingsRepository = Depends(get_settings_repository)
+):
+    """Update application settings"""
+    updated_settings = await ConfigController.update_settings(settings, settings_repo)
+    return updated_settings
 
 @app.get(
     "/health",

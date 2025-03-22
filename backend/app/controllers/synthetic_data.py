@@ -8,18 +8,16 @@ from app.services.llm_service import OpenAILLMService, GeminiLLMService, CustomL
 
 from app.database import (
     LLMConfigRepository, DataSourceConfigRepository,
-    SavedGenerationRepository,
-    get_llm_config_repository, get_datasource_config_repository,
-    get_saved_generation_repository
+    SavedGenerationRepository
 )
 
 class SyntheticDataController:
     @staticmethod
     async def generate_synthetic_data(
         request: SyntheticDataRequest,
-        llm_repo: LLMConfigRepository = Depends(get_llm_config_repository),
-        datasource_repo: DataSourceConfigRepository = Depends(get_datasource_config_repository),
-        saved_repo: SavedGenerationRepository = Depends(get_saved_generation_repository)
+        llm_repo: LLMConfigRepository,
+        datasource_repo: DataSourceConfigRepository,
+        saved_repo: SavedGenerationRepository
     ) -> SyntheticDataResponse:
         try:
             # Fetch configurations if IDs are provided
