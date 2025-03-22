@@ -6,13 +6,17 @@ from app.services.base import BaseLLMService
 
 
 class CustomLLMService(BaseLLMService):
-    def __init__(self, config: LLMConfig):
+    def __init__(self, config: Dict):
         super().__init__(config)
         # Initialize parameters to empty dict if None
-        if self.config.parameters is None:
-            self.config.parameters = {}
+        if not isinstance(config, dict) or 'parameters' not in config:
+            self.parameters = {}
+        else:
+            self.parameters = config['parameters']
         # Extract API base URL from parameters or use default
-        self.api_base_url = self.config.parameters.get("api_base_url", "http://localhost:8000/v1")
+        self.api_base_url = self.parameters.get("api_base_url", "http://localhost:8000/v1")
+        self.api_key = config.get('api_key')
+        self.model_name = config.get('model_name')
         
     async def generate_synthetic_data(
             self,
@@ -21,16 +25,16 @@ class CustomLLMService(BaseLLMService):
             dataset_type: DatasetType
     ) -> List[Dict]:
         async with aiohttp.ClientSession() as session:
-            headers = {"Authorization": f"Bearer {self.config.api_key}"} if self.config.api_key else {}
+            headers = {"Authorization": f"Bearer {self.api_key}"} if self.api_key else {}
             prompt = self._create_prompt(base_data, dataset_type, sample_size)
             
             # Get additional parameters from config
-            temperature = self.config.parameters.get("temperature", 0.7)
-            max_tokens = self.config.parameters.get("max_tokens", 1000)
+            temperature = self.parameters.get("temperature", 0.7)
+            max_tokens = self.parameters.get("max_tokens", 1000)
             
             # Construct the payload
             payload = {
-                "model": self.config.model_name,
+                "model": self.model_name,
                 "prompt": prompt,
                 "max_tokens": max_tokens,
                 "temperature": temperature,
@@ -38,7 +42,7 @@ class CustomLLMService(BaseLLMService):
             }
             
             # Add any additional parameters from config
-            for key, value in self.config.parameters.items():
+            for key, value in self.parameters.items():
                 if key not in ["api_base_url", "temperature", "max_tokens"]:
                     payload[key] = value
             

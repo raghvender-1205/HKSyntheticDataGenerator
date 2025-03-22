@@ -4,7 +4,10 @@
   // Form data
   let settings = {
     openai_api_key: '',
-    anthropic_api_key: '',
+    gemini_api_key: '',
+    custom_api_key: '',
+    custom_api_base_url: 'http://localhost:8000/v1',
+    custom_model_name: 'custom-model',
     default_llm_provider: 'openai',
     default_model: 'gpt-4',
     default_temperature: 0.7,
@@ -21,7 +24,8 @@
   // LLM options
   const llmOptions = [
     { provider: 'openai', models: ['gpt-3.5-turbo', 'gpt-4', 'gpt-4-turbo'] },
-    { provider: 'anthropic', models: ['claude-2', 'claude-instant-1'] }
+    { provider: 'gemini', models: ['gemini-pro', 'gemini-1.5-pro'] },
+    { provider: 'custom', models: ['custom-model'] }
   ];
   
   onMount(async () => {
@@ -173,17 +177,69 @@
             </div>
             
             <div>
-              <label for="anthropic_api_key" class="block text-secondary-700 mb-2">Anthropic API Key</label>
+              <label for="gemini_api_key" class="block text-secondary-700 mb-2">Google Gemini API Key</label>
               <input 
                 type="password" 
-                id="anthropic_api_key" 
-                bind:value={settings.anthropic_api_key} 
-                placeholder="sk-ant-..." 
+                id="gemini_api_key" 
+                bind:value={settings.gemini_api_key} 
+                placeholder="AIza..." 
                 class="input w-full"
               />
               <p class="text-sm text-secondary-500 mt-1">
-                Used for Claude models. Get your API key from the <a href="https://console.anthropic.com/account/keys" target="_blank" rel="noopener noreferrer" class="text-primary-600 hover:underline">Anthropic console</a>.
+                Used for Gemini models. Get your API key from the <a href="https://ai.google.dev/" target="_blank" rel="noopener noreferrer" class="text-primary-600 hover:underline">Google AI Studio</a>.
               </p>
+            </div>
+            
+            <!-- Custom LLM Configuration -->
+            <div class="mt-8 border-t pt-6">
+              <h3 class="text-lg font-semibold text-secondary-800 mb-4">Custom LLM Configuration</h3>
+              <p class="text-secondary-600 mb-4">
+                Configure your custom LLM endpoint settings. These will be used when selecting the "Custom" provider.
+              </p>
+              
+              <div class="space-y-4">
+                <div>
+                  <label for="custom_api_base_url" class="block text-secondary-700 mb-2">API Base URL</label>
+                  <input 
+                    type="text" 
+                    id="custom_api_base_url" 
+                    bind:value={settings.custom_api_base_url} 
+                    placeholder="http://localhost:8000/v1" 
+                    class="input w-full"
+                  />
+                  <p class="text-sm text-secondary-500 mt-1">
+                    The base URL for your custom LLM API (e.g., vLLM, llama.cpp, local server).
+                  </p>
+                </div>
+                
+                <div>
+                  <label for="custom_api_key" class="block text-secondary-700 mb-2">Custom API Key (Optional)</label>
+                  <input 
+                    type="password" 
+                    id="custom_api_key" 
+                    bind:value={settings.custom_api_key} 
+                    placeholder="Your API key" 
+                    class="input w-full"
+                  />
+                  <p class="text-sm text-secondary-500 mt-1">
+                    Optional API key for your custom LLM service, if required.
+                  </p>
+                </div>
+                
+                <div>
+                  <label for="custom_model_name" class="block text-secondary-700 mb-2">Model Name</label>
+                  <input 
+                    type="text" 
+                    id="custom_model_name" 
+                    bind:value={settings.custom_model_name} 
+                    placeholder="custom-model" 
+                    class="input w-full"
+                  />
+                  <p class="text-sm text-secondary-500 mt-1">
+                    The name of the model to use with your custom LLM provider.
+                  </p>
+                </div>
+              </div>
             </div>
           </div>
         </div>
@@ -230,6 +286,48 @@
                 {/each}
               </select>
             </div>
+            
+            <!-- Custom LLM Configuration fields (shown only when custom provider is selected) -->
+            {#if settings.default_llm_provider === 'custom'}
+              <div class="mt-6 pt-6 border-t border-secondary-200">
+                <h3 class="text-lg font-semibold text-secondary-800 mb-4">Custom LLM Configuration</h3>
+                
+                <div class="space-y-4">
+                  <div>
+                    <label for="default_custom_api_base_url" class="block text-secondary-700 mb-2">API Base URL</label>
+                    <input 
+                      type="text" 
+                      id="default_custom_api_base_url" 
+                      bind:value={settings.custom_api_base_url} 
+                      placeholder="http://localhost:8000/v1" 
+                      class="input w-full"
+                    />
+                  </div>
+                  
+                  <div>
+                    <label for="default_custom_model_name" class="block text-secondary-700 mb-2">Model Name</label>
+                    <input 
+                      type="text" 
+                      id="default_custom_model_name" 
+                      bind:value={settings.custom_model_name} 
+                      placeholder="custom-model" 
+                      class="input w-full"
+                    />
+                  </div>
+                  
+                  <div>
+                    <label for="default_custom_api_key" class="block text-secondary-700 mb-2">API Key (Optional)</label>
+                    <input 
+                      type="password" 
+                      id="default_custom_api_key" 
+                      bind:value={settings.custom_api_key} 
+                      placeholder="Your API key" 
+                      class="input w-full"
+                    />
+                  </div>
+                </div>
+              </div>
+            {/if}
             
             <div>
               <label for="default_temperature" class="block text-secondary-700 mb-2">Default Temperature</label>

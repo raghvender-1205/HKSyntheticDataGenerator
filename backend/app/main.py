@@ -1,8 +1,11 @@
 import logging
 from datetime import datetime
-from fastapi import FastAPI, Depends, HTTPException
+import os
+import shutil
+from fastapi import FastAPI, Depends, HTTPException, UploadFile, File, Form
 from fastapi.responses import JSONResponse
 from uuid import UUID
+import json
 
 from app.controllers import SyntheticDataController, ConfigController
 from app.schemas import (
@@ -70,6 +73,104 @@ async def generate_data(
         raise e
     except Exception as e:
         # logger.error(f"Error processing request: {str(e)}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Error generating data: {str(e)}"
+        )
+
+@app.post(
+    "/api/v1/upload/pdf",
+    response_model=dict,
+    summary="Upload PDF file",
+    description="Upload a PDF file to be used for data generation"
+)
+async def upload_pdf(
+    file: UploadFile = File(...),
+    datasource_name: str = Form("uploaded_pdf"),
+):
+    """
+    Upload a PDF file to the server for processing
+    """
+    try:
+        # Create the uploads directory if it doesn't exist
+        os.makedirs("data/uploads", exist_ok=True)
+        
+        # Save the uploaded file
+        file_path = os.path.join("data/uploads", file.filename)
+        
+        # Save the uploaded file
+        with open(file_path, "wb") as buffer:
+            shutil.copyfileobj(file.file, buffer)
+        
+        return {
+            "filename": file.filename,
+            "path": file_path,
+            "success": True,
+            "message": f"File {file.filename} uploaded successfully"
+        }
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Error uploading file: {str(e)}"
+        )
+
+@app.post(
+    "/api/v1/generate/upload",
+    response_model=SyntheticDataResponse,
+    summary="Generate synthetic data with file upload",
+    description="Upload a file and generate synthetic data in one request"
+)
+async def generate_with_upload(
+    file: UploadFile = File(...),
+    payload: str = Form(...),
+    llm_repo: LLMConfigRepository = Depends(get_llm_config_repository),
+    datasource_repo: DataSourceConfigRepository = Depends(get_datasource_config_repository),
+    saved_repo: SavedGenerationRepository = Depends(get_saved_generation_repository)
+):
+    """
+    Upload a file and generate synthetic data in one request
+    """
+    try:
+        # Parse the JSON payload
+        request_data = json.loads(payload)
+        
+        # Create the uploads directory if it doesn't exist
+        os.makedirs("data/uploads", exist_ok=True)
+        
+        # Save the uploaded file
+        file_path = os.path.join("data/uploads", file.filename)
+        with open(file_path, "wb") as buffer:
+            shutil.copyfileobj(file.file, buffer)
+            
+        # Ensure datasource_config is properly formatted
+        if "datasource_config" not in request_data:
+            request_data["datasource_config"] = {}
+            
+        # Make sure source_path is at the top level of the datasource_config
+        request_data["datasource_config"]["source_path"] = "data/uploads"
+        request_data["datasource_config"]["type"] = "pdf"
+        
+        # Ensure connection_string is present (required by PDFDataSource)
+        if "connection_string" not in request_data["datasource_config"]:
+            request_data["datasource_config"]["connection_string"] = ""
+            
+        # Ensure parameters are present
+        if "parameters" not in request_data["datasource_config"]:
+            request_data["datasource_config"]["parameters"] = {
+                "extract_metadata": "true",
+                "extract_layout": "true"
+            }
+        
+        # Create the request object
+        request = SyntheticDataRequest(**request_data)
+        
+        # Generate synthetic data
+        response = await SyntheticDataController.generate_synthetic_data(
+            request, llm_repo, datasource_repo, saved_repo
+        )
+        
+        return response
+    except Exception as e:
         raise HTTPException(
             status_code=500,
             detail=f"Error generating data: {str(e)}"

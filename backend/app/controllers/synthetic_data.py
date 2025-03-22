@@ -52,10 +52,27 @@ class SyntheticDataController:
 
             # Data Source Factory
             if data_source_type == "csv":
+                # Ensure parameters exists for CSV data source
+                if isinstance(data_source_config, dict):
+                    if 'parameters' not in data_source_config:
+                        data_source_config['parameters'] = {}
                 data_source = CSVDataSource(data_source_config)
             elif data_source_type == "database":
+                # Ensure parameters exists for DB data source
+                if isinstance(data_source_config, dict):
+                    if 'parameters' not in data_source_config:
+                        data_source_config['parameters'] = {}
                 data_source = DBDataSource(data_source_config)
             elif data_source_type == "pdf":
+                # Ensure source_path and parameters exist for PDF data source
+                if isinstance(data_source_config, dict):
+                    if 'source_path' not in data_source_config:
+                        data_source_config['source_path'] = "data/uploads"
+                    if 'parameters' not in data_source_config:
+                        data_source_config['parameters'] = {
+                            "extract_metadata": "true",
+                            "extract_layout": "true"
+                        }
                 data_source = PDFDataSource(data_source_config)
             else:
                 raise HTTPException(400, "Unsupported data source type")

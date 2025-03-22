@@ -5,10 +5,11 @@ from uuid import UUID
 
 class DatasetType(str, Enum):
     """Type of dataset to generate"""
-    TABULAR = "tabular"
+    QA = "qa"
+    INSTRUCTION = "instruction"
+    CONVERSATION = "conversation"
+    CLASSIFICATION = "classification"
     TEXT = "text"
-    TIME_SERIES = "time_series"
-    IMAGE = "image"
 
 class SyntheticDataRequest(BaseModel):
     """Request model for generating synthetic data"""

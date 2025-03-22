@@ -13,7 +13,34 @@ class PDFDataSource(BaseDataSource):
     """
     def __init__(self, config: DataSourceConfig):
         super().__init__(config)
-        self.pdf_directory = config.source_path
+        
+        # Add fallback logic for missing source_path
+        if not hasattr(config, 'source_path'):
+            if isinstance(config, dict) and 'source_path' in config:
+                self.pdf_directory = config['source_path']
+            else:
+                # Fallback to default directory
+                self.pdf_directory = "data/uploads"
+                print(f"Warning: source_path not found in config, using default: {self.pdf_directory}")
+        else:
+            self.pdf_directory = config.source_path
+        
+        # Initialize parameters if needed
+        self.parameters = {}
+        if hasattr(config, 'parameters') and config.parameters is not None:
+            self.parameters = config.parameters
+        elif isinstance(config, dict) and 'parameters' in config:
+            self.parameters = config['parameters']
+        
+        # Set default parameters if not specified
+        if not self.parameters:
+            self.parameters = {
+                "extract_metadata": "true",
+                "extract_layout": "true"
+            }
+        
+        # Ensure the directory exists
+        os.makedirs(self.pdf_directory, exist_ok=True)
         
     async def fetch_data(self, limit: int) -> List[Dict]:
         """
