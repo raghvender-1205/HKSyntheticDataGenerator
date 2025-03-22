@@ -27,12 +27,13 @@ async def root():
     return {"message": "Welcome to the Synthetic Data Generator API"}
 
 # Import routes after app initialization
-from api.routes import dataset_routes, datasource_routes, llm_routes
+from api.routes import dataset_routes, datasource_routes, llm_routes, utility_routes
 
-# Include routers
-app.include_router(dataset_routes.router)
-app.include_router(datasource_routes.router)
-app.include_router(llm_routes.router)
+# Include routers with API v1 prefix
+app.include_router(dataset_routes.router, prefix="/api/v1")
+app.include_router(datasource_routes.router, prefix="/api/v1")
+app.include_router(llm_routes.router, prefix="/api/v1")
+app.include_router(utility_routes.router, prefix="/api/v1")
 
 if __name__ == "__main__":
     import uvicorn

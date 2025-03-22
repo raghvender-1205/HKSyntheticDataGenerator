@@ -6,6 +6,8 @@ export interface SchemaProperty {
   enum?: string[];
   default?: any;
   hidden?: boolean;
+  minimum?: number;
+  maximum?: number;
 }
 
 export interface ConfigSchema {

@@ -34,12 +34,16 @@ class PluginManager(Generic[T]):
             return
             
         # Get the package name for importing
-        package_path = self.plugin_dir.replace(os.sep, '.')
+        # Get the relative path from the current directory to the plugin directory
+        # Use a proper Python package path for importing
+        current_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        rel_path = os.path.relpath(self.plugin_dir, current_dir)
+        package_path = rel_path.replace(os.sep, '.')
         
         # Import all modules in the plugin directory
         for _, name, is_pkg in pkgutil.iter_modules([self.plugin_dir]):
             if not is_pkg:
-                module = importlib.import_module(f"{package_path}.{name}")
+                module = importlib.import_module(f"plugins.{package_path.split('.')[-1]}.{name}")
                 
                 # Find and register all plugin classes in the module
                 for attr_name, attr_value in module.__dict__.items():
