@@ -19,3 +19,6 @@ pytest-cov
 httpx
 colorama
 aiohttp
+sqlalchemy
+alembic
+aiosqlite

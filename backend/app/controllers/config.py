@@ -1,358 +1,422 @@
 from datetime import datetime
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Any
 from uuid import UUID, uuid4
 
-from fastapi import HTTPException
+from fastapi import HTTPException, Depends
+from sqlalchemy.exc import SQLAlchemyError
 
-from app.models import LLMConfig, DataSourceConfig
-from app.models.http_models.config import (
-    LLMConfigResponse, 
-    DataSourceConfigResponse,
-    ConfigListResponse,
-    SavedGenerationConfig
+from app.database import (
+    LLMConfigRepository, DataSourceConfigRepository,
+    SavedGenerationRepository, SettingsRepository,
+    get_llm_config_repository, get_datasource_config_repository,
+    get_saved_generation_repository, get_settings_repository
 )
 
+from app.schemas import (
+    LLMConfig, LLMConfigCreate, LLMConfigUpdate,
+    DataSourceConfig, DataSourceConfigCreate, DataSourceConfigUpdate,
+    SavedGeneration, SavedGenerationCreate, SavedGenerationUpdate,
+    GenerationRequest, GenerationResponse
+)
 
 class ConfigController:
-    """Controller for managing configurations"""
+    """Controller for managing configurations using database repositories"""
     
-    # In-memory storage for configurations (in a real app, use a database)
-    _llm_configs: Dict[UUID, Dict] = {}
-    _datasource_configs: Dict[UUID, Dict] = {}
-    _saved_generations: Dict[UUID, Dict] = {}
-    
-    @classmethod
-    async def get_all_configs(cls) -> ConfigListResponse:
+    @staticmethod
+    async def get_all_configs(
+        llm_repo: LLMConfigRepository = Depends(get_llm_config_repository),
+        datasource_repo: DataSourceConfigRepository = Depends(get_datasource_config_repository)
+    ):
         """Get all available configurations"""
-        llm_configs = [
-            LLMConfigResponse(**config)
-            for config in cls._llm_configs.values()
-        ]
-        
-        data_source_configs = [
-            DataSourceConfigResponse(**config)
-            for config in cls._datasource_configs.values()
-        ]
-        
-        return ConfigListResponse(
-            llm_configs=llm_configs,
-            data_source_configs=data_source_configs
-        )
+        try:
+            llm_configs = await llm_repo.get_all()
+            datasource_configs = await datasource_repo.get_all()
+            
+            return {
+                "llm_configs": llm_configs,
+                "data_source_configs": datasource_configs
+            }
+        except SQLAlchemyError as e:
+            raise HTTPException(
+                status_code=500,
+                detail=f"Database error retrieving configurations: {str(e)}"
+            )
     
-    @classmethod
-    async def get_llm_config(cls, config_id: UUID) -> LLMConfigResponse:
+    @staticmethod
+    async def get_llm_config(
+        config_id: UUID,
+        llm_repo: LLMConfigRepository = Depends(get_llm_config_repository)
+    ) -> LLMConfig:
         """Get an LLM configuration by ID"""
-        if config_id not in cls._llm_configs:
-            raise HTTPException(404, "LLM configuration not found")
-        
-        return LLMConfigResponse(**cls._llm_configs[config_id])
-    
-    @classmethod
-    async def create_llm_config(
-        cls,
-        name: str,
-        config: LLMConfig,
-        is_default: bool = False
-    ) -> LLMConfigResponse:
-        """Create a new LLM configuration"""
-        # Generate a new UUID for the config
-        config_id = uuid4()
-        current_time = datetime.utcnow().isoformat()
-        
-        # If this is set as default, unset any existing default
-        if is_default:
-            for key in cls._llm_configs:
-                if cls._llm_configs[key]["is_default"]:
-                    cls._llm_configs[key]["is_default"] = False
-        
-        # Create the new config record
-        config_data = {
-            "id": config_id,
-            "name": name,
-            "config": config,
-            "is_default": is_default,
-            "created_at": current_time,
-            "last_used_at": None
-        }
-        
-        cls._llm_configs[config_id] = config_data
-        return LLMConfigResponse(**config_data)
-    
-    @classmethod
-    async def update_llm_config(
-        cls,
-        config_id: UUID,
-        name: Optional[str] = None,
-        config: Optional[LLMConfig] = None,
-        is_default: Optional[bool] = None
-    ) -> LLMConfigResponse:
-        """Update an existing LLM configuration"""
-        if config_id not in cls._llm_configs:
-            raise HTTPException(404, "LLM configuration not found")
-        
-        config_data = cls._llm_configs[config_id]
-        
-        # Update fields if provided
-        if name is not None:
-            config_data["name"] = name
-        
-        if config is not None:
-            config_data["config"] = config
-        
-        if is_default is not None:
-            # If setting as default, unset any existing default
-            if is_default and not config_data["is_default"]:
-                for key in cls._llm_configs:
-                    if cls._llm_configs[key]["is_default"]:
-                        cls._llm_configs[key]["is_default"] = False
-            
-            config_data["is_default"] = is_default
-        
-        cls._llm_configs[config_id] = config_data
-        return LLMConfigResponse(**config_data)
-    
-    @classmethod
-    async def delete_llm_config(cls, config_id: UUID) -> None:
-        """Delete an LLM configuration"""
-        if config_id not in cls._llm_configs:
-            raise HTTPException(404, "LLM configuration not found")
-        
-        # Check if this was the default configuration
-        was_default = cls._llm_configs[config_id]["is_default"]
-        
-        # Delete the configuration
-        del cls._llm_configs[config_id]
-        
-        # If this was the default and we have other configs, set a new default
-        if was_default and cls._llm_configs:
-            # Pick the first config as the new default
-            first_key = next(iter(cls._llm_configs))
-            cls._llm_configs[first_key]["is_default"] = True
-    
-    @classmethod
-    async def get_default_llm_config(cls) -> Optional[LLMConfigResponse]:
-        """Get the default LLM configuration"""
-        for config in cls._llm_configs.values():
-            if config["is_default"]:
-                return LLMConfigResponse(**config)
-        
-        # If no default is set but we have configs, return the first one
-        if cls._llm_configs:
-            first_key = next(iter(cls._llm_configs))
-            return LLMConfigResponse(**cls._llm_configs[first_key])
-        
-        return None
-    
-    @classmethod
-    async def get_datasource_config(cls, config_id: UUID) -> DataSourceConfigResponse:
-        """Get a data source configuration by ID"""
-        if config_id not in cls._datasource_configs:
-            raise HTTPException(404, "Data source configuration not found")
-        
-        return DataSourceConfigResponse(**cls._datasource_configs[config_id])
-    
-    @classmethod
-    async def create_datasource_config(
-        cls,
-        name: str,
-        config: DataSourceConfig,
-        is_default: bool = False
-    ) -> DataSourceConfigResponse:
-        """Create a new data source configuration"""
-        # Generate a new UUID for the config
-        config_id = uuid4()
-        current_time = datetime.utcnow().isoformat()
-        
-        # If this is set as default, unset any existing default
-        if is_default:
-            for key in cls._datasource_configs:
-                if cls._datasource_configs[key]["is_default"]:
-                    cls._datasource_configs[key]["is_default"] = False
-        
-        # Create the new config record
-        config_data = {
-            "id": config_id,
-            "name": name,
-            "config": config,
-            "is_default": is_default,
-            "created_at": current_time,
-            "last_used_at": None
-        }
-        
-        cls._datasource_configs[config_id] = config_data
-        return DataSourceConfigResponse(**config_data)
-    
-    @classmethod
-    async def update_datasource_config(
-        cls,
-        config_id: UUID,
-        name: Optional[str] = None,
-        config: Optional[DataSourceConfig] = None,
-        is_default: Optional[bool] = None
-    ) -> DataSourceConfigResponse:
-        """Update an existing data source configuration"""
-        if config_id not in cls._datasource_configs:
-            raise HTTPException(404, "Data source configuration not found")
-        
-        config_data = cls._datasource_configs[config_id]
-        
-        # Update fields if provided
-        if name is not None:
-            config_data["name"] = name
-        
-        if config is not None:
-            config_data["config"] = config
-        
-        if is_default is not None:
-            # If setting as default, unset any existing default
-            if is_default and not config_data["is_default"]:
-                for key in cls._datasource_configs:
-                    if cls._datasource_configs[key]["is_default"]:
-                        cls._datasource_configs[key]["is_default"] = False
-            
-            config_data["is_default"] = is_default
-        
-        cls._datasource_configs[config_id] = config_data
-        return DataSourceConfigResponse(**config_data)
-    
-    @classmethod
-    async def delete_datasource_config(cls, config_id: UUID) -> None:
-        """Delete a data source configuration"""
-        if config_id not in cls._datasource_configs:
-            raise HTTPException(404, "Data source configuration not found")
-        
-        # Check if this was the default configuration
-        was_default = cls._datasource_configs[config_id]["is_default"]
-        
-        # Delete the configuration
-        del cls._datasource_configs[config_id]
-        
-        # If this was the default and we have other configs, set a new default
-        if was_default and cls._datasource_configs:
-            # Pick the first config as the new default
-            first_key = next(iter(cls._datasource_configs))
-            cls._datasource_configs[first_key]["is_default"] = True
-    
-    @classmethod
-    async def get_default_datasource_config(cls) -> Optional[DataSourceConfigResponse]:
-        """Get the default data source configuration"""
-        for config in cls._datasource_configs.values():
-            if config["is_default"]:
-                return DataSourceConfigResponse(**config)
-        
-        # If no default is set but we have configs, return the first one
-        if cls._datasource_configs:
-            first_key = next(iter(cls._datasource_configs))
-            return DataSourceConfigResponse(**cls._datasource_configs[first_key])
-        
-        return None
-        
-    @classmethod
-    async def get_all_saved_generations(cls) -> List[SavedGenerationConfig]:
-        """Get all saved generation configurations"""
-        return [SavedGenerationConfig(**config) for config in cls._saved_generations.values()]
-    
-    @classmethod
-    async def get_saved_generation(cls, config_id: UUID) -> SavedGenerationConfig:
-        """Get a saved generation configuration by ID"""
-        if config_id not in cls._saved_generations:
-            raise HTTPException(404, "Saved generation configuration not found")
-        
-        return SavedGenerationConfig(**cls._saved_generations[config_id])
-    
-    @classmethod
-    async def create_saved_generation(
-        cls,
-        name: str,
-        llm_config_id: UUID,
-        data_source_config_id: UUID,
-        dataset_type: str,
-        sample_size: int
-    ) -> SavedGenerationConfig:
-        """Create a new saved generation configuration"""
-        # Validate that the referenced configurations exist
-        if llm_config_id not in cls._llm_configs:
-            raise HTTPException(404, "LLM configuration not found")
-        
-        if data_source_config_id not in cls._datasource_configs:
-            raise HTTPException(404, "Data source configuration not found")
-        
-        # Generate a new UUID for the config
-        config_id = uuid4()
-        current_time = datetime.utcnow().isoformat()
-        
-        # Create the new config record
-        config_data = {
-            "id": config_id,
-            "name": name,
-            "llm_config_id": llm_config_id,
-            "data_source_config_id": data_source_config_id,
-            "dataset_type": dataset_type,
-            "sample_size": sample_size,
-            "created_at": current_time,
-            "last_used_at": None
-        }
-        
-        cls._saved_generations[config_id] = config_data
-        return SavedGenerationConfig(**config_data)
-    
-    @classmethod
-    async def update_saved_generation(
-        cls,
-        config_id: UUID,
-        name: Optional[str] = None,
-        llm_config_id: Optional[UUID] = None,
-        data_source_config_id: Optional[UUID] = None,
-        dataset_type: Optional[str] = None,
-        sample_size: Optional[int] = None
-    ) -> SavedGenerationConfig:
-        """Update an existing saved generation configuration"""
-        if config_id not in cls._saved_generations:
-            raise HTTPException(404, "Saved generation configuration not found")
-        
-        config_data = cls._saved_generations[config_id]
-        
-        # Update fields if provided
-        if name is not None:
-            config_data["name"] = name
-        
-        if llm_config_id is not None:
-            # Validate that the referenced configuration exists
-            if llm_config_id not in cls._llm_configs:
+        try:
+            config = await llm_repo.get(str(config_id))
+            if not config:
                 raise HTTPException(404, "LLM configuration not found")
-            config_data["llm_config_id"] = llm_config_id
-        
-        if data_source_config_id is not None:
-            # Validate that the referenced configuration exists
-            if data_source_config_id not in cls._datasource_configs:
-                raise HTTPException(404, "Data source configuration not found")
-            config_data["data_source_config_id"] = data_source_config_id
-        
-        if dataset_type is not None:
-            config_data["dataset_type"] = dataset_type
-        
-        if sample_size is not None:
-            config_data["sample_size"] = sample_size
-        
-        cls._saved_generations[config_id] = config_data
-        return SavedGenerationConfig(**config_data)
+            return config
+        except SQLAlchemyError as e:
+            raise HTTPException(
+                status_code=500,
+                detail=f"Database error retrieving LLM configuration: {str(e)}"
+            )
     
-    @classmethod
-    async def delete_saved_generation(cls, config_id: UUID) -> None:
-        """Delete a saved generation configuration"""
-        if config_id not in cls._saved_generations:
-            raise HTTPException(404, "Saved generation configuration not found")
-        
-        # Delete the configuration
-        del cls._saved_generations[config_id]
-        
-    @classmethod
-    async def mark_config_as_used(cls, llm_id: UUID, datasource_id: UUID) -> None:
-        """Mark the LLM and data source configurations as last used"""
-        current_time = datetime.utcnow().isoformat()
-        
-        if llm_id in cls._llm_configs:
-            cls._llm_configs[llm_id]["last_used_at"] = current_time
+    @staticmethod
+    async def create_llm_config(
+        config: LLMConfigCreate,
+        llm_repo: LLMConfigRepository = Depends(get_llm_config_repository)
+    ) -> LLMConfig:
+        """Create a new LLM configuration"""
+        try:
+            # If this is set as default, we need to handle that logic
+            if config.is_default:
+                # Get the current default, if any
+                default_config = await llm_repo.get_default()
+                if default_config:
+                    # Unset it as default
+                    await llm_repo.update(str(default_config.id), is_default=False)
             
-        if datasource_id in cls._datasource_configs:
-            cls._datasource_configs[datasource_id]["last_used_at"] = current_time 
+            # Create the new config
+            return await llm_repo.create(
+                name=config.name,
+                config=config.config,
+                is_default=config.is_default
+            )
+        except SQLAlchemyError as e:
+            raise HTTPException(
+                status_code=500,
+                detail=f"Database error creating LLM configuration: {str(e)}"
+            )
+    
+    @staticmethod
+    async def update_llm_config(
+        config_id: UUID,
+        config: LLMConfigUpdate,
+        llm_repo: LLMConfigRepository = Depends(get_llm_config_repository)
+    ) -> LLMConfig:
+        """Update an existing LLM configuration"""
+        try:
+            # Check if the config exists
+            existing_config = await llm_repo.get(str(config_id))
+            if not existing_config:
+                raise HTTPException(404, "LLM configuration not found")
+            
+            # Create a dict of updates, only including non-None values
+            updates = {k: v for k, v in config.model_dump().items() if v is not None}
+            
+            # Handle default flag separately if needed
+            if config.is_default is not None and config.is_default:
+                # Get the current default, if any and it's not this config
+                default_config = await llm_repo.get_default()
+                if default_config and default_config.id != config_id:
+                    # Unset it as default
+                    await llm_repo.update(str(default_config.id), is_default=False)
+            
+            # Update the config
+            return await llm_repo.update(str(config_id), **updates)
+        except SQLAlchemyError as e:
+            raise HTTPException(
+                status_code=500,
+                detail=f"Database error updating LLM configuration: {str(e)}"
+            )
+    
+    @staticmethod
+    async def delete_llm_config(
+        config_id: UUID,
+        llm_repo: LLMConfigRepository = Depends(get_llm_config_repository)
+    ) -> None:
+        """Delete an LLM configuration"""
+        try:
+            # Check if the config exists
+            existing_config = await llm_repo.get(str(config_id))
+            if not existing_config:
+                raise HTTPException(404, "LLM configuration not found")
+            
+            # If this was the default, we'll need to set a new default
+            was_default = existing_config.is_default
+            
+            # Delete the config
+            await llm_repo.delete(str(config_id))
+            
+            # If this was the default, set a new one
+            if was_default:
+                # Get all remaining configs
+                configs = await llm_repo.get_all()
+                if configs:
+                    # Set the first one as default
+                    await llm_repo.set_as_default(str(configs[0].id))
+        except SQLAlchemyError as e:
+            raise HTTPException(
+                status_code=500,
+                detail=f"Database error deleting LLM configuration: {str(e)}"
+            )
+    
+    @staticmethod
+    async def get_default_llm_config(
+        llm_repo: LLMConfigRepository = Depends(get_llm_config_repository)
+    ) -> Optional[LLMConfig]:
+        """Get the default LLM configuration"""
+        try:
+            default_config = await llm_repo.get_default()
+            if not default_config:
+                # If no default is set but we have configs, set the first one
+                configs = await llm_repo.get_all()
+                if configs:
+                    # Set the first one as default
+                    default_config = await llm_repo.set_as_default(str(configs[0].id))
+            
+            return default_config
+        except SQLAlchemyError as e:
+            raise HTTPException(
+                status_code=500,
+                detail=f"Database error retrieving default LLM configuration: {str(e)}"
+            )
+    
+    @staticmethod
+    async def get_datasource_config(
+        config_id: UUID,
+        datasource_repo: DataSourceConfigRepository = Depends(get_datasource_config_repository)
+    ) -> DataSourceConfig:
+        """Get a data source configuration by ID"""
+        try:
+            config = await datasource_repo.get(str(config_id))
+            if not config:
+                raise HTTPException(404, "Data source configuration not found")
+            return config
+        except SQLAlchemyError as e:
+            raise HTTPException(
+                status_code=500,
+                detail=f"Database error retrieving data source configuration: {str(e)}"
+            )
+    
+    @staticmethod
+    async def create_datasource_config(
+        config: DataSourceConfigCreate,
+        datasource_repo: DataSourceConfigRepository = Depends(get_datasource_config_repository)
+    ) -> DataSourceConfig:
+        """Create a new data source configuration"""
+        try:
+            # If this is set as default, we need to handle that logic
+            if config.is_default:
+                # Get the current default, if any
+                default_config = await datasource_repo.get_default()
+                if default_config:
+                    # Unset it as default
+                    await datasource_repo.update(str(default_config.id), is_default=False)
+            
+            # Create the new config
+            return await datasource_repo.create(
+                name=config.name,
+                config=config.config,
+                is_default=config.is_default
+            )
+        except SQLAlchemyError as e:
+            raise HTTPException(
+                status_code=500,
+                detail=f"Database error creating data source configuration: {str(e)}"
+            )
+    
+    @staticmethod
+    async def update_datasource_config(
+        config_id: UUID,
+        config: DataSourceConfigUpdate,
+        datasource_repo: DataSourceConfigRepository = Depends(get_datasource_config_repository)
+    ) -> DataSourceConfig:
+        """Update an existing data source configuration"""
+        try:
+            # Check if the config exists
+            existing_config = await datasource_repo.get(str(config_id))
+            if not existing_config:
+                raise HTTPException(404, "Data source configuration not found")
+            
+            # Create a dict of updates, only including non-None values
+            updates = {k: v for k, v in config.model_dump().items() if v is not None}
+            
+            # Handle default flag separately if needed
+            if config.is_default is not None and config.is_default:
+                # Get the current default, if any and it's not this config
+                default_config = await datasource_repo.get_default()
+                if default_config and default_config.id != config_id:
+                    # Unset it as default
+                    await datasource_repo.update(str(default_config.id), is_default=False)
+            
+            # Update the config
+            return await datasource_repo.update(str(config_id), **updates)
+        except SQLAlchemyError as e:
+            raise HTTPException(
+                status_code=500,
+                detail=f"Database error updating data source configuration: {str(e)}"
+            )
+    
+    @staticmethod
+    async def delete_datasource_config(
+        config_id: UUID,
+        datasource_repo: DataSourceConfigRepository = Depends(get_datasource_config_repository)
+    ) -> None:
+        """Delete a data source configuration"""
+        try:
+            # Check if the config exists
+            existing_config = await datasource_repo.get(str(config_id))
+            if not existing_config:
+                raise HTTPException(404, "Data source configuration not found")
+            
+            # If this was the default, we'll need to set a new default
+            was_default = existing_config.is_default
+            
+            # Delete the config
+            await datasource_repo.delete(str(config_id))
+            
+            # If this was the default, set a new one
+            if was_default:
+                # Get all remaining configs
+                configs = await datasource_repo.get_all()
+                if configs:
+                    # Set the first one as default
+                    await datasource_repo.set_as_default(str(configs[0].id))
+        except SQLAlchemyError as e:
+            raise HTTPException(
+                status_code=500,
+                detail=f"Database error deleting data source configuration: {str(e)}"
+            )
+    
+    @staticmethod
+    async def get_default_datasource_config(
+        datasource_repo: DataSourceConfigRepository = Depends(get_datasource_config_repository)
+    ) -> Optional[DataSourceConfig]:
+        """Get the default data source configuration"""
+        try:
+            default_config = await datasource_repo.get_default()
+            if not default_config:
+                # If no default is set but we have configs, set the first one
+                configs = await datasource_repo.get_all()
+                if configs:
+                    # Set the first one as default
+                    default_config = await datasource_repo.set_as_default(str(configs[0].id))
+            
+            return default_config
+        except SQLAlchemyError as e:
+            raise HTTPException(
+                status_code=500,
+                detail=f"Database error retrieving default data source configuration: {str(e)}"
+            )
+    
+    @staticmethod
+    async def get_all_saved_generations(
+        saved_repo: SavedGenerationRepository = Depends(get_saved_generation_repository)
+    ) -> List[SavedGeneration]:
+        """Get all saved generation configurations"""
+        try:
+            return await saved_repo.get_all()
+        except SQLAlchemyError as e:
+            raise HTTPException(
+                status_code=500,
+                detail=f"Database error retrieving saved generations: {str(e)}"
+            )
+    
+    @staticmethod
+    async def get_saved_generation(
+        config_id: UUID,
+        saved_repo: SavedGenerationRepository = Depends(get_saved_generation_repository)
+    ) -> SavedGeneration:
+        """Get a saved generation configuration by ID"""
+        try:
+            config = await saved_repo.get(str(config_id))
+            if not config:
+                raise HTTPException(404, "Saved generation not found")
+            return config
+        except SQLAlchemyError as e:
+            raise HTTPException(
+                status_code=500,
+                detail=f"Database error retrieving saved generation: {str(e)}"
+            )
+    
+    @staticmethod
+    async def create_saved_generation(
+        config: SavedGenerationCreate,
+        saved_repo: SavedGenerationRepository = Depends(get_saved_generation_repository),
+        llm_repo: LLMConfigRepository = Depends(get_llm_config_repository),
+        datasource_repo: DataSourceConfigRepository = Depends(get_datasource_config_repository)
+    ) -> SavedGeneration:
+        """Create a new saved generation"""
+        try:
+            # Validate that referenced configs exist
+            llm_config = await llm_repo.get(str(config.llm_config_id))
+            if not llm_config:
+                raise HTTPException(404, "LLM configuration not found")
+            
+            datasource_config = await datasource_repo.get(str(config.datasource_config_id))
+            if not datasource_config:
+                raise HTTPException(404, "Data source configuration not found")
+            
+            # Create the new saved generation
+            return await saved_repo.create(
+                **config.model_dump()
+            )
+        except SQLAlchemyError as e:
+            raise HTTPException(
+                status_code=500,
+                detail=f"Database error creating saved generation: {str(e)}"
+            )
+    
+    @staticmethod
+    async def update_saved_generation(
+        config_id: UUID,
+        config: SavedGenerationUpdate,
+        saved_repo: SavedGenerationRepository = Depends(get_saved_generation_repository)
+    ) -> SavedGeneration:
+        """Update an existing saved generation"""
+        try:
+            # Check if the config exists
+            existing_config = await saved_repo.get(str(config_id))
+            if not existing_config:
+                raise HTTPException(404, "Saved generation not found")
+            
+            # Create a dict of updates, only including non-None values
+            updates = {k: v for k, v in config.model_dump().items() if v is not None}
+            
+            # Update the config
+            return await saved_repo.update(str(config_id), **updates)
+        except SQLAlchemyError as e:
+            raise HTTPException(
+                status_code=500,
+                detail=f"Database error updating saved generation: {str(e)}"
+            )
+    
+    @staticmethod
+    async def delete_saved_generation(
+        config_id: UUID,
+        saved_repo: SavedGenerationRepository = Depends(get_saved_generation_repository)
+    ) -> None:
+        """Delete a saved generation"""
+        try:
+            # Check if the config exists
+            existing_config = await saved_repo.get(str(config_id))
+            if not existing_config:
+                raise HTTPException(404, "Saved generation not found")
+            
+            # Delete the config
+            await saved_repo.delete(str(config_id))
+        except SQLAlchemyError as e:
+            raise HTTPException(
+                status_code=500,
+                detail=f"Database error deleting saved generation: {str(e)}"
+            )
+    
+    @staticmethod
+    async def mark_config_as_used(
+        llm_id: UUID,
+        datasource_id: UUID,
+        llm_repo: LLMConfigRepository = Depends(get_llm_config_repository),
+        datasource_repo: DataSourceConfigRepository = Depends(get_datasource_config_repository)
+    ) -> None:
+        """Mark the LLM and data source configurations as last used"""
+        try:
+            # Mark LLM config as used
+            if llm_id:
+                await llm_repo.mark_as_used(str(llm_id))
+            
+            # Mark data source config as used
+            if datasource_id:
+                await datasource_repo.mark_as_used(str(datasource_id))
+        except SQLAlchemyError as e:
+            # Don't fail the request if marking as used fails
+            # Just log the error
+            print(f"Error marking configs as used: {str(e)}") 

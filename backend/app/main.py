@@ -5,11 +5,12 @@ from fastapi.responses import JSONResponse
 from uuid import UUID
 
 from app.controllers import SyntheticDataController, ConfigController
-from app.models import SyntheticDataRequest, SyntheticDataResponse
-from app.models.http_models.config import (
-    LLMConfigResponse, LLMConfigCreateRequest, LLMConfigUpdateRequest,
-    DataSourceConfigResponse, DataSourceConfigCreateRequest, DataSourceConfigUpdateRequest,
-    ConfigListResponse, SavedGenerationConfig, SavedGenerationCreateRequest, SavedGenerationUpdateRequest
+from app.schemas import (
+    LLMConfig, LLMConfigCreate, LLMConfigUpdate,
+    DataSourceConfig, DataSourceConfigCreate, DataSourceConfigUpdate,
+    SavedGeneration, SavedGenerationCreate, SavedGenerationUpdate,
+    GenerationRequest, GenerationResponse,
+    SyntheticDataRequest, SyntheticDataResponse, DatasetType
 )
 
 
@@ -43,13 +44,12 @@ async def generate_data(request: SyntheticDataRequest):
         response = await SyntheticDataController.generate_synthetic_data(request)
         # logger.info(f"Successfully generated {request.sample_size} samples")
 
-        # Mark the configurations as used
-        await ConfigController.mark_config_as_used(
-            # Here we assume the LLM config has an id field, but it doesn't
-            # In a real app, you would need to find the config by matching or set IDs
-            UUID("00000000-0000-0000-0000-000000000000"),
-            UUID("00000000-0000-0000-0000-000000000000")
-        )
+        # Mark the configurations as used if IDs are provided
+        if request.llm_config_id and request.datasource_config_id:
+            await ConfigController.mark_config_as_used(
+                request.llm_config_id,
+                request.datasource_config_id
+            )
 
         return response
     except HTTPException as e:
@@ -67,18 +67,18 @@ async def generate_data(request: SyntheticDataRequest):
 # LLM Configuration Routes
 @app.get(
     "/api/v1/config/llm",
-    response_model=list[LLMConfigResponse],
+    response_model=list[LLMConfig],
     summary="Get all LLM configurations",
     description="Returns all saved LLM configurations"
 )
 async def get_all_llm_configs():
     """Get all LLM configurations"""
     configs = await ConfigController.get_all_configs()
-    return configs.llm_configs
+    return configs["llm_configs"]
 
 @app.get(
     "/api/v1/config/llm/default",
-    response_model=LLMConfigResponse,
+    response_model=LLMConfig,
     summary="Get default LLM configuration",
     description="Returns the default LLM configuration"
 )
@@ -91,7 +91,7 @@ async def get_default_llm_config():
 
 @app.get(
     "/api/v1/config/llm/{config_id}",
-    response_model=LLMConfigResponse,
+    response_model=LLMConfig,
     summary="Get an LLM configuration",
     description="Returns a specific LLM configuration by ID"
 )
@@ -101,32 +101,23 @@ async def get_llm_config(config_id: UUID):
 
 @app.post(
     "/api/v1/config/llm",
-    response_model=LLMConfigResponse,
+    response_model=LLMConfig,
     summary="Create an LLM configuration",
     description="Creates a new LLM configuration"
 )
-async def create_llm_config(request: LLMConfigCreateRequest):
+async def create_llm_config(request: LLMConfigCreate):
     """Create a new LLM configuration"""
-    return await ConfigController.create_llm_config(
-        name=request.name,
-        config=request.config,
-        is_default=request.is_default
-    )
+    return await ConfigController.create_llm_config(request)
 
 @app.put(
     "/api/v1/config/llm/{config_id}",
-    response_model=LLMConfigResponse,
+    response_model=LLMConfig,
     summary="Update an LLM configuration",
     description="Updates an existing LLM configuration"
 )
-async def update_llm_config(config_id: UUID, request: LLMConfigUpdateRequest):
+async def update_llm_config(config_id: UUID, request: LLMConfigUpdate):
     """Update an existing LLM configuration"""
-    return await ConfigController.update_llm_config(
-        config_id=config_id,
-        name=request.name,
-        config=request.config,
-        is_default=request.is_default
-    )
+    return await ConfigController.update_llm_config(config_id, request)
 
 @app.delete(
     "/api/v1/config/llm/{config_id}",
@@ -141,18 +132,18 @@ async def delete_llm_config(config_id: UUID):
 # Data Source Configuration Routes
 @app.get(
     "/api/v1/config/datasource",
-    response_model=list[DataSourceConfigResponse],
+    response_model=list[DataSourceConfig],
     summary="Get all data source configurations",
     description="Returns all saved data source configurations"
 )
 async def get_all_datasource_configs():
     """Get all data source configurations"""
     configs = await ConfigController.get_all_configs()
-    return configs.data_source_configs
+    return configs["data_source_configs"]
 
 @app.get(
     "/api/v1/config/datasource/default",
-    response_model=DataSourceConfigResponse,
+    response_model=DataSourceConfig,
     summary="Get default data source configuration",
     description="Returns the default data source configuration"
 )
@@ -165,7 +156,7 @@ async def get_default_datasource_config():
 
 @app.get(
     "/api/v1/config/datasource/{config_id}",
-    response_model=DataSourceConfigResponse,
+    response_model=DataSourceConfig,
     summary="Get a data source configuration",
     description="Returns a specific data source configuration by ID"
 )
@@ -175,32 +166,23 @@ async def get_datasource_config(config_id: UUID):
 
 @app.post(
     "/api/v1/config/datasource",
-    response_model=DataSourceConfigResponse,
+    response_model=DataSourceConfig,
     summary="Create a data source configuration",
     description="Creates a new data source configuration"
 )
-async def create_datasource_config(request: DataSourceConfigCreateRequest):
+async def create_datasource_config(request: DataSourceConfigCreate):
     """Create a new data source configuration"""
-    return await ConfigController.create_datasource_config(
-        name=request.name,
-        config=request.config,
-        is_default=request.is_default
-    )
+    return await ConfigController.create_datasource_config(request)
 
 @app.put(
     "/api/v1/config/datasource/{config_id}",
-    response_model=DataSourceConfigResponse,
+    response_model=DataSourceConfig,
     summary="Update a data source configuration",
     description="Updates an existing data source configuration"
 )
-async def update_datasource_config(config_id: UUID, request: DataSourceConfigUpdateRequest):
+async def update_datasource_config(config_id: UUID, request: DataSourceConfigUpdate):
     """Update an existing data source configuration"""
-    return await ConfigController.update_datasource_config(
-        config_id=config_id,
-        name=request.name,
-        config=request.config,
-        is_default=request.is_default
-    )
+    return await ConfigController.update_datasource_config(config_id, request)
 
 @app.delete(
     "/api/v1/config/datasource/{config_id}",
@@ -215,7 +197,7 @@ async def delete_datasource_config(config_id: UUID):
 # Saved Generation Configuration Routes
 @app.get(
     "/api/v1/config/saved",
-    response_model=list[SavedGenerationConfig],
+    response_model=list[SavedGeneration],
     summary="Get all saved generation configurations",
     description="Returns all saved generation configurations"
 )
@@ -225,7 +207,7 @@ async def get_all_saved_generations():
 
 @app.get(
     "/api/v1/config/saved/{config_id}",
-    response_model=SavedGenerationConfig,
+    response_model=SavedGeneration,
     summary="Get a saved generation configuration",
     description="Returns a specific saved generation configuration by ID"
 )
@@ -235,36 +217,23 @@ async def get_saved_generation(config_id: UUID):
 
 @app.post(
     "/api/v1/config/saved",
-    response_model=SavedGenerationConfig,
+    response_model=SavedGeneration,
     summary="Create a saved generation configuration",
     description="Creates a new saved generation configuration"
 )
-async def create_saved_generation(request: SavedGenerationCreateRequest):
+async def create_saved_generation(request: SavedGenerationCreate):
     """Create a new saved generation configuration"""
-    return await ConfigController.create_saved_generation(
-        name=request.name,
-        llm_config_id=request.llm_config_id,
-        data_source_config_id=request.data_source_config_id,
-        dataset_type=request.dataset_type,
-        sample_size=request.sample_size
-    )
+    return await ConfigController.create_saved_generation(request)
 
 @app.put(
     "/api/v1/config/saved/{config_id}",
-    response_model=SavedGenerationConfig,
+    response_model=SavedGeneration,
     summary="Update a saved generation configuration",
     description="Updates an existing saved generation configuration"
 )
-async def update_saved_generation(config_id: UUID, request: SavedGenerationUpdateRequest):
+async def update_saved_generation(config_id: UUID, request: SavedGenerationUpdate):
     """Update an existing saved generation configuration"""
-    return await ConfigController.update_saved_generation(
-        config_id=config_id,
-        name=request.name,
-        llm_config_id=request.llm_config_id,
-        data_source_config_id=request.data_source_config_id,
-        dataset_type=request.dataset_type,
-        sample_size=request.sample_size
-    )
+    return await ConfigController.update_saved_generation(config_id, request)
 
 @app.delete(
     "/api/v1/config/saved/{config_id}",
@@ -279,7 +248,6 @@ async def delete_saved_generation(config_id: UUID):
 # Combined Configuration Route
 @app.get(
     "/api/v1/config",
-    response_model=ConfigListResponse,
     summary="Get all configurations",
     description="Returns all configurations (LLM and data source)"
 )
