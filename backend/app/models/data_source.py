@@ -12,4 +12,5 @@ class DataSourceType(str, Enum):
 class DataSourceConfig(BaseModel):
     type: DataSourceType
     connection_string: str
+    source_path: Optional[str] = None
     parameters: Optional[Dict[str, str]] = None

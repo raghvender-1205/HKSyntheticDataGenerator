@@ -2,7 +2,7 @@ from datetime import datetime
 from fastapi import HTTPException
 
 from app.models import SyntheticDataRequest, SyntheticDataResponse
-from app.services.data_source import CSVDataSource, DBDataSource
+from app.services.data_source import CSVDataSource, DBDataSource, PDFDataSource
 from app.services.llm_service import OpenAILLMService, GeminiLLMService
 
 
@@ -15,6 +15,8 @@ class SyntheticDataController:
                 data_source = CSVDataSource(request.data_source)
             elif request.data_source.type == "database":
                 data_source = DBDataSource(request.data_source)
+            elif request.data_source.type == "pdf":
+                data_source = PDFDataSource(request.data_source)
             else:
                 raise HTTPException(400, "Unsupported data source type")
 

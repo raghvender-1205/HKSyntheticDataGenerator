@@ -12,3 +12,4 @@ langchain
 langchain-community
 asyncpg
 pandas
+unstructured
