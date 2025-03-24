@@ -41,7 +41,7 @@ class DataSourceConfigModel(Base):
     last_used_at = Column(DateTime, nullable=True)
 
     # Relationships
-    saved_generations = relationship("SavedGenerationModel", back_populates="datasource_config")
+    saved_generations = relationship("SavedGenerationModel", back_populates="data_source_config")
 
 class SavedGenerationModel(Base):
     """
@@ -60,7 +60,7 @@ class SavedGenerationModel(Base):
 
     # Relationships
     llm_config = relationship("LLMConfigModel", back_populates="saved_generations")
-    datasource_config = relationship("DataSourceConfigModel", back_populates="saved_generations")
+    data_source_config = relationship("DataSourceConfigModel", back_populates="saved_generations")
 
 class SettingsModel(Base):
     """

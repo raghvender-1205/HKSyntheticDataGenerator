@@ -24,17 +24,17 @@ class SyntheticDataController:
             data_source_config = None
             llm_config = None
             
-            if request.datasource_config_id:
-                datasource_model = await datasource_repo.get(str(request.datasource_config_id))
+            if request.data_source_config_id:
+                datasource_model = await datasource_repo.get(str(request.data_source_config_id))
                 if not datasource_model:
                     raise HTTPException(404, "Data source configuration not found")
                 data_source_config = datasource_model.config
                 data_source_type = data_source_config.get("type", "unknown")
             else:
                 # Use the provided config directly
-                data_source_config = request.datasource_config
+                data_source_config = request.data_source_config
                 if not data_source_config:
-                    raise HTTPException(400, "Either datasource_config_id or datasource_config must be provided")
+                    raise HTTPException(400, "Either data_source_config_id or data_source_config must be provided")
                 data_source_type = data_source_config.get("type", "unknown")
             
             if request.llm_config_id:
@@ -113,16 +113,43 @@ class SyntheticDataController:
             if request.save_result:
                 # Create a saved generation record
                 saved_id = uuid4()
+                
+                # If config IDs aren't provided, we need to create config entries first
+                save_llm_config_id = None
+                save_data_source_config_id = None
+                
+                # Save LLM config if needed
+                if request.llm_config_id:
+                    save_llm_config_id = str(request.llm_config_id)
+                else:
+                    # Create a new LLM config entry
+                    new_llm_config = await llm_repo.create(
+                        name=f"LLM Config {datetime.utcnow().isoformat()}",
+                        config=llm_config
+                    )
+                    save_llm_config_id = new_llm_config.id
+                
+                # Save data source config if needed
+                if request.data_source_config_id:
+                    save_data_source_config_id = str(request.data_source_config_id)
+                else:
+                    # Create a new data source config entry
+                    new_data_source_config = await datasource_repo.create(
+                        name=f"Data Source Config {datetime.utcnow().isoformat()}",
+                        config=data_source_config
+                    )
+                    save_data_source_config_id = new_data_source_config.id
+                
+                # Now create the saved generation with the config IDs
                 saved_generation = await saved_repo.create(
                     id=str(saved_id),
                     name=request.save_name or f"Generation {datetime.utcnow().isoformat()}",
-                    llm_config_id=str(request.llm_config_id) if request.llm_config_id else None,
-                    datasource_config_id=str(request.datasource_config_id) if request.datasource_config_id else None,
-                    result={
-                        "data": synthetic_data,
-                        "metadata": response.metadata
-                    }
+                    llm_config_id=save_llm_config_id,
+                    data_source_config_id=save_data_source_config_id,
+                    dataset_type=request.dataset_type,
+                    sample_size=request.sample_size
                 )
+                
                 response.id = saved_id
                 response.saved = True
 

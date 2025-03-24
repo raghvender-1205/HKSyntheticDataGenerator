@@ -50,7 +50,7 @@ class DataSourceConfig(DataSourceConfigBase, BaseSchema):
 class SavedGenerationBase(BaseModel):
     name: str
     llm_config_id: UUID
-    datasource_config_id: UUID
+    data_source_config_id: UUID
     result: Dict[str, Any]
 
 class SavedGenerationCreate(SavedGenerationBase):
@@ -63,7 +63,7 @@ class SavedGenerationUpdate(BaseModel):
 class SavedGeneration(SavedGenerationBase, BaseSchema):
     last_used_at: Optional[datetime] = None
     llm_config: Optional[LLMConfig] = None
-    datasource_config: Optional[DataSourceConfig] = None
+    data_source_config: Optional[DataSourceConfig] = None
 
 # Settings schemas
 class SettingsBase(BaseModel):
@@ -82,9 +82,9 @@ class Settings(SettingsBase, BaseSchema):
 # Schemas for generation request
 class GenerationRequest(BaseModel):
     llm_config_id: Optional[UUID] = None
-    datasource_config_id: Optional[UUID] = None
+    data_source_config_id: Optional[UUID] = None
     llm_config: Optional[Dict[str, Any]] = None
-    datasource_config: Optional[Dict[str, Any]] = None
+    data_source_config: Optional[Dict[str, Any]] = None
     save_result: bool = False
     save_name: Optional[str] = None
 

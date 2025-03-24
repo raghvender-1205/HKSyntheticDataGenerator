@@ -342,7 +342,7 @@ class ConfigController:
             if not llm_config:
                 raise HTTPException(404, "LLM configuration not found")
             
-            datasource_config = await datasource_repo.get(str(config.datasource_config_id))
+            datasource_config = await datasource_repo.get(str(config.data_source_config_id))
             if not datasource_config:
                 raise HTTPException(404, "Data source configuration not found")
             

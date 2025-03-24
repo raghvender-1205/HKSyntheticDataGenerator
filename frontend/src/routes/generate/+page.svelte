@@ -290,7 +290,7 @@
       const payload = {
         dataset_type: formData.dataConfig.format,
         sample_size: parseInt(formData.dataConfig.count.toString()),
-        datasource_config: {
+        data_source_config: {
           type: "pdf",
           source_path: "data/uploads",
           connection_string: "",
@@ -400,7 +400,7 @@
       const requestPayload = {
         dataset_type: formData.dataConfig.format,
         sample_size: parseInt(formData.dataConfig.count.toString()),
-        datasource_config: dataSourceConfig,
+        data_source_config: dataSourceConfig,
         llm_config: llmConfig,
         save_result: true,
         save_name: `Generation ${new Date().toISOString()}`
@@ -450,7 +450,7 @@
   // LLM options
   const llmOptions = [
     { provider: 'openai', models: ['gpt-3.5-turbo', 'gpt-4', 'gpt-4-turbo'] },
-    { provider: 'gemini', models: ['gemini-pro', 'gemini-1.5-pro'], parameters: ['temperature', 'max_tokens', 'top_p', 'top_k'] },
+    { provider: 'gemini', models: ['gemini-pro', 'gemini-1.5-pro', 'gemini-2.0-flash'], parameters: ['temperature', 'max_tokens', 'top_p', 'top_k'] },
     { 
       provider: 'groq', 
       models: [

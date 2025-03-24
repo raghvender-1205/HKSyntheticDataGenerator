@@ -25,7 +25,7 @@
   // LLM options
   const llmOptions = [
     { provider: 'openai', models: ['gpt-3.5-turbo', 'gpt-4', 'gpt-4-turbo'] },
-    { provider: 'gemini', models: ['gemini-pro', 'gemini-1.5-pro'] },
+    { provider: 'gemini', models: ['gemini-pro', 'gemini-1.5-pro', 'gemini-2.0-flash'] },
     { 
       provider: 'groq', 
       models: [

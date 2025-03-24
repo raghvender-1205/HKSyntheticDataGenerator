@@ -14,9 +14,9 @@ class DatasetType(str, Enum):
 class SyntheticDataRequest(BaseModel):
     """Request model for generating synthetic data"""
     llm_config_id: Optional[UUID] = None
-    datasource_config_id: Optional[UUID] = None
+    data_source_config_id: Optional[UUID] = None
     llm_config: Optional[Dict[str, Any]] = None
-    datasource_config: Optional[Dict[str, Any]] = None
+    data_source_config: Optional[Dict[str, Any]] = None
     dataset_type: DatasetType
     sample_size: int = Field(..., ge=1, le=1000)
     output_format: str = "json"
