@@ -3,7 +3,7 @@ from fastapi import HTTPException, Depends
 from uuid import uuid4
 
 from app.schemas import SyntheticDataRequest, SyntheticDataResponse
-from app.services.data_source import CSVDataSource, DBDataSource, PDFDataSource
+from app.services.data_source import CSVDataSource, DBDataSource, PDFDataSource, JSONDataSource
 from app.services.llm_service import OpenAILLMService, GeminiLLMService, CustomLLMService, GroqLLMService
 
 from app.database import (
@@ -74,6 +74,17 @@ class SyntheticDataController:
                             "extract_layout": "true"
                         }
                 data_source = PDFDataSource(data_source_config)
+            elif data_source_type == "json":
+                # Ensure source_path and parameters exist for JSON data source
+                if isinstance(data_source_config, dict):
+                    if 'source_path' not in data_source_config:
+                        data_source_config['source_path'] = "data/uploads"
+                    if 'parameters' not in data_source_config:
+                        data_source_config['parameters'] = {
+                            "extract_metadata": "true",
+                            "extract_layout": "true"
+                        }
+                data_source = JSONDataSource(data_source_config)
             else:
                 raise HTTPException(400, "Unsupported data source type")
 

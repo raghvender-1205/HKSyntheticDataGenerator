@@ -27,13 +27,54 @@
   };
   
   // Form data
-  let formData = {
+  interface DataSource {
+    type: string;
+    url: string;
+    file: File | null;
+    text: string;
+    jsonData: any;
+    source_path: string;
+    source: 'pdf' | 'json';
+    name: string;
+    preview: string;
+  }
+
+  interface FormData {
+    dataSource: DataSource;
+    dataConfig: {
+      format: string;
+      count: number;
+      seed: number;
+    };
+    llmConfig: {
+      provider: string;
+      model: string;
+      temperature: number;
+      maxTokens: number;
+      customEndpoint: string;
+      apiKey: string;
+      modelName: string;
+      topP: number | undefined;
+      topK: number | undefined;
+      apiBase: string | undefined;
+    };
+    name: string;
+    prompt: string;
+    includeSource: boolean;
+    count: number;
+  }
+
+  let formData: FormData = {
     dataSource: {
-      type: 'pdf',
+      type: 'file',
       url: '',
-      file: null as File | null,
+      file: null,
       text: '',
-      source_path: 'data/uploads'
+      jsonData: '',
+      source_path: '',
+      source: 'pdf',
+      name: '',
+      preview: ''
     },
     dataConfig: {
       format: 'qa',
@@ -48,9 +89,9 @@
       customEndpoint: '',
       apiKey: '',
       modelName: 'custom-model',
-      topP: undefined as number | undefined,
-      topK: undefined as number | undefined,
-      apiBase: undefined as string | undefined
+      topP: undefined,
+      topK: undefined,
+      apiBase: undefined
     },
     name: '',
     prompt: '',
@@ -162,8 +203,9 @@
     if (step === 0) {
       // Data source validation
       if (formData.dataSource.type === 'pdf') {
-        // Also consider the selectedFile from the upload UI
-        return !!formData.dataSource.file || !!formData.dataSource.url || !!selectedFile;
+        return !!formData.dataSource.file || !!formData.dataSource.url;
+      } else if (formData.dataSource.type === 'json') {
+        return !!formData.dataSource.file && !!formData.dataSource.jsonData;
       } else if (formData.dataSource.type === 'text') {
         return formData.dataSource.text.trim().length > 0;
       }
@@ -209,63 +251,67 @@
   
   async function handleFileSelect(event: Event): Promise<void> {
     const target = event.target as HTMLInputElement;
-    const file = target.files ? target.files[0] : null;
+    const file = target.files?.[0];
     
-    if (file && file.type === 'application/pdf') {
-      selectedFile = file;
-      pdfFileName = file.name;
-      
-      // Also update the form data
-      formData.dataSource.file = file;
-    } else {
-      ToastManager.show('Please select a valid PDF file', 'error');
-      if (target) target.value = '';
-      selectedFile = null;
-      pdfFileName = '';
-      formData.dataSource.file = null;
-    }
-  }
-  
-  async function uploadPDF(): Promise<void> {
-    if (!selectedFile) {
-      ToastManager.show('Please select a file to upload', 'error');
-      return;
-    }
-    
-    isFileUploading = true;
-    uploadProgress = 0;
-    
+    if (!file) return;
+
+    formData.dataSource.file = file;
+    formData.dataSource.source = file.type === 'application/json' ? 'json' : 'pdf';
+    formData.dataSource.name = file.name;
+
     try {
-      const formDataObj = new FormData();
-      formDataObj.append('file', selectedFile);
-      
-      const response = await fetch('/api/v1/upload/pdf', {
-        method: 'POST',
-        body: formDataObj
-      });
-      
-      if (!response.ok) {
-        throw new Error('Upload failed');
-      }
-      
-      const result = await response.json();
-      ToastManager.show(`File uploaded successfully: ${result.filename}`, 'success');
-      
-      // Update the data source configuration
-      formData.dataSource.source_path = "data/uploads";
-      formData.dataSource.file = selectedFile; // Ensure file is set in form data
-      
-      // Maybe trigger next step if user wants to continue
-      if (currentStep === 0) {
-        nextStep();
-      }
-      
+        if (file.type === 'application/json') {
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                try {
+                    const jsonData = JSON.parse(e.target?.result as string);
+                    formData.dataSource.jsonData = jsonData;
+                    // Format the JSON data for preview
+                    formData.dataSource.preview = JSON.stringify(jsonData, null, 2);
+                } catch (error) {
+                    console.error('Error parsing JSON:', error);
+                    formData.dataSource.preview = 'Invalid JSON file';
+                }
+            };
+            reader.readAsText(file);
+
+            // Upload JSON file
+            const formDataToSend = new FormData();
+            formDataToSend.append('file', file);
+            formDataToSend.append('datasource_name', file.name);
+
+            const response = await fetch('http://localhost:8000/api/v1/upload/json', {
+                method: 'POST',
+                body: formDataToSend
+            });
+
+            if (!response.ok) {
+                throw new Error('Failed to upload JSON file');
+            }
+
+            const result = await response.json();
+            console.log('JSON upload result:', result);
+        } else {
+            // Upload PDF file
+            const formDataToSend = new FormData();
+            formDataToSend.append('file', file);
+            formDataToSend.append('datasource_name', file.name);
+
+            const response = await fetch('http://localhost:8000/api/v1/upload/pdf', {
+                method: 'POST',
+                body: formDataToSend
+            });
+
+            if (!response.ok) {
+                throw new Error('Failed to upload PDF file');
+            }
+
+            const result = await response.json();
+            console.log('PDF upload result:', result);
+        }
     } catch (error) {
-      console.error('Error uploading file:', error);
-      ToastManager.show(`Failed to upload file: ${error instanceof Error ? error.message : 'Unknown error'}`, 'error');
-    } finally {
-      isFileUploading = false;
-      uploadProgress = 100;
+        console.error('Error handling file:', error);
+        formData.dataSource.preview = `Error: ${error instanceof Error ? error.message : 'Unknown error'}`;
     }
   }
   
@@ -292,13 +338,14 @@
         dataset_type: formData.dataConfig.format,
         sample_size: parseInt(formData.dataConfig.count.toString()),
         data_source_config: {
-          type: "pdf",
+          type: formData.dataSource.type,
           source_path: "data/uploads",
           connection_string: "",
           parameters: {
             extract_metadata: "true",
             extract_layout: "true"
-          }
+          },
+          ...(formData.dataSource.type === 'json' && { json_data: formData.dataSource.jsonData })
         },
         llm_config: formData.llmConfig,
         save_result: true,
@@ -357,6 +404,8 @@
       
       if (formData.dataSource.type === 'text') {
         dataSourceConfig.text = formData.dataSource.text;
+      } else if (formData.dataSource.type === 'json') {
+        dataSourceConfig.json_data = formData.dataSource.jsonData;
       }
       
       // Prepare LLM config
@@ -588,6 +637,10 @@
               <span>PDF Document</span>
             </label>
             <label class="flex items-center">
+              <input type="radio" name="dataSourceType" value="json" bind:group={formData.dataSource.type} class="mr-2">
+              <span>JSON Data</span>
+            </label>
+            <label class="flex items-center">
               <input type="radio" name="dataSourceType" value="text" bind:group={formData.dataSource.type} class="mr-2">
               <span>Text Input</span>
             </label>
@@ -610,11 +663,11 @@
                 </div>
                 
                 <button 
-                  on:click={uploadPDF} 
-                  class="btn btn-primary {isFileUploading || !selectedFile ? 'opacity-50 cursor-not-allowed' : ''}"
-                  disabled={isFileUploading || !selectedFile}
+                  on:click={generateWithUpload} 
+                  class="btn btn-primary {selectedFile ? '' : 'opacity-50 cursor-not-allowed'}"
+                  disabled={!selectedFile || loading}
                 >
-                  {#if isFileUploading}
+                  {#if loading}
                     <Spinner size="small" class_name="mr-2" /> Uploading...
                   {:else}
                     Upload PDF
@@ -660,6 +713,42 @@
               <p class="text-sm text-secondary-600 mt-1 bg-yellow-50 p-2 rounded">
                 Note: The system will use PDF files already stored in the data/uploads directory on the server or files you've uploaded above.
               </p>
+            </div>
+          {:else if formData.dataSource.type === 'json'}
+            <div class="mb-4">
+              <label class="block text-secondary-700 mb-2">JSON File Upload</label>
+              <div class="flex flex-col space-y-3">
+                <div class="flex items-center space-x-2">
+                  <input 
+                    type="file" 
+                    accept=".json" 
+                    on:change={handleFileSelect}
+                    class="file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0 file:text-sm file:font-semibold file:bg-primary-50 file:text-primary-700 hover:file:bg-primary-100 text-sm text-secondary-700"
+                  >
+                  {#if formData.dataSource.name}
+                    <span class="text-sm text-secondary-600">Selected: {formData.dataSource.name}</span>
+                  {/if}
+                </div>
+                
+                {#if formData.dataSource.preview}
+                  <div class="mt-4">
+                    <label class="block text-secondary-700 mb-2">JSON Preview</label>
+                    <pre class="json-preview">{formData.dataSource.preview}</pre>
+                  </div>
+                {/if}
+                
+                <button 
+                  on:click={generateWithUpload} 
+                  class="btn btn-primary {formData.dataSource.file ? '' : 'opacity-50 cursor-not-allowed'}"
+                  disabled={!formData.dataSource.file}
+                >
+                  {#if formData.dataSource.file}
+                    Upload JSON
+                  {:else}
+                    Select JSON File
+                  {/if}
+                </button>
+              </div>
             </div>
           {:else if formData.dataSource.type === 'text'}
             <div class="mb-4">
@@ -857,6 +946,8 @@
             <h3 class="font-medium mb-2">Data Source</h3>
             {#if formData.dataSource.type === 'pdf'}
               <p>PDF {formData.dataSource.file ? `File: ${formData.dataSource.file.name}` : `URL: ${formData.dataSource.url}`}</p>
+            {:else if formData.dataSource.type === 'json'}
+              <p>JSON File: {pdfFileName}</p>
             {:else}
               <p>Text Input ({formData.dataSource.text.length} characters)</p>
             {/if}
@@ -928,4 +1019,17 @@
       </div>
     </div>
   {/if}
-</div> 
+</div>
+
+<style>
+  .json-preview {
+    background-color: #f5f5f5;
+    padding: 1rem;
+    border-radius: 4px;
+    max-height: 300px;
+    overflow-y: auto;
+    font-family: monospace;
+    white-space: pre-wrap;
+    word-wrap: break-word;
+  }
+</style> 

@@ -118,4 +118,4 @@ npm test
 
 ## TODO
 1. Add support to export to multiple formats
-2. Add JSONData Source for Data generation
+2. Add WebURLs Source for Data generation

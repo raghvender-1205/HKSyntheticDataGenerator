@@ -8,9 +8,11 @@ class DataSourceType(str, Enum):
     API = "api"
     PDF = "pdf"
     WEB_URL = "web_url"
+    JSON = "json"
 
 class DataSourceConfig(BaseModel):
     type: DataSourceType
     connection_string: str
     source_path: Optional[str] = None
     parameters: Optional[Dict[str, str]] = None
+    json_data: Optional[str] = None

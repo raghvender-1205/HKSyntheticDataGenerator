@@ -4,6 +4,7 @@ import os
 import shutil
 from fastapi import FastAPI, Depends, HTTPException, UploadFile, File, Form
 from fastapi.responses import JSONResponse
+from fastapi.middleware.cors import CORSMiddleware
 from uuid import UUID
 import json
 
@@ -26,6 +27,15 @@ app = FastAPI(
     title="Synthetic Data Generator",
     description="API for generating synthetic datasets using various data sources, LLMs",
     version="1.0.0"
+)
+
+# Add CORS middleware
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:5173"],  # Frontend URL
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
 
 @app.exception_handler(Exception)
@@ -108,6 +118,57 @@ async def upload_pdf(
             "success": True,
             "message": f"File {file.filename} uploaded successfully"
         }
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Error uploading file: {str(e)}"
+        )
+
+@app.post(
+    "/api/v1/upload/json",
+    response_model=dict,
+    summary="Upload JSON file",
+    description="Upload a JSON file to be used for data generation"
+)
+async def upload_json(
+    file: UploadFile = File(...),
+    datasource_name: str = Form("uploaded_json"),
+):
+    """
+    Upload a JSON file to the server for processing
+    """
+    try:
+        # Create the uploads directory if it doesn't exist
+        os.makedirs("data/uploads", exist_ok=True)
+        
+        # Save the uploaded file
+        file_path = os.path.join("data/uploads", file.filename)
+        
+        # Read and validate JSON content
+        content = await file.read()
+        try:
+            json.loads(content)
+        except json.JSONDecodeError:
+            raise HTTPException(
+                status_code=400,
+                detail="Invalid JSON file"
+            )
+        
+        # Reset file pointer
+        await file.seek(0)
+        
+        # Save the uploaded file
+        with open(file_path, "wb") as buffer:
+            shutil.copyfileobj(file.file, buffer)
+        
+        return {
+            "filename": file.filename,
+            "path": file_path,
+            "success": True,
+            "message": f"File {file.filename} uploaded successfully"
+        }
+    except HTTPException as e:
+        raise e
     except Exception as e:
         raise HTTPException(
             status_code=500,
