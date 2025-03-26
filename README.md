@@ -116,8 +116,6 @@ npm test
 
 [MIT License](LICENSE)
 
-## Acknowledgements
-
-- OpenAI for GPT models
-- Anthropic for Claude models
-- PDFBox for PDF processing
+## TODO
+1. Add support to export to multiple formats
+2. Add JSONData Source for Data generation
