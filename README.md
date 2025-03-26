@@ -119,3 +119,4 @@ npm test
 ## TODO
 1. Add support to export to multiple formats
 2. Add WebURLs Source for Data generation
+3. Add Batch Generate API, such that we can generate longer synthetic data and not reaching token limit.
