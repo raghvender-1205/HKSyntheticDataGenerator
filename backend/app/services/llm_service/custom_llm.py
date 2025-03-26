@@ -1,4 +1,5 @@
 import aiohttp
+import json
 from typing import List, Dict
 
 from app.models import DatasetType, LLMConfig
@@ -61,19 +62,29 @@ class CustomLLMService(BaseLLMService):
                 return self._format_response(result, dataset_type)
 
     def _create_prompt(self, base_data: List[Dict], dataset_type: DatasetType, sample_size: int) -> str:
-        base_prompt = f"Generate {sample_size} synthetic {dataset_type.value} examples based on: {base_data}"
-        if dataset_type == DatasetType.QA:
-            return f"{base_prompt}\nFormat as question-answer pairs."
-        elif dataset_type == DatasetType.INSTRUCTION:
-            return f"{base_prompt}\nFormat as instruction-response pairs."
-        elif dataset_type == DatasetType.CONVERSATION:
-            return f"{base_prompt}\nFormat as multi-turn conversations."
-        elif dataset_type == DatasetType.CLASSIFICATION:
-            return f"{base_prompt}\nFormat as text-label pairs."
-        elif dataset_type == DatasetType.TEXT:
-            return f"{base_prompt}\nGenerate text passages."
+        base_prompt = f"""Generate {sample_size} unique and diverse synthetic {dataset_type.value} examples based on the following content. 
+Each example should be distinct and cover different aspects of the content. Avoid repeating similar questions or topics.
+Content: {json.dumps(base_data)}
 
-        return base_prompt
+Important guidelines:
+1. Each example must be unique and different from others
+2. Cover a wide range of topics and aspects from the content
+3. Vary the complexity and depth of questions
+4. Ensure answers are accurate and based on the provided content
+5. Format the output as a JSON array of objects
+
+"""
+        
+        if dataset_type == DatasetType.QA:
+            return f"{base_prompt}Format as a JSON array of question-answer pairs with 'question' and 'answer' fields."
+        elif dataset_type == DatasetType.INSTRUCTION:
+            return f"{base_prompt}Format as a JSON array of instruction-response pairs with 'instruction' and 'response' fields."
+        elif dataset_type == DatasetType.CONVERSATION:
+            return f"{base_prompt}Format as a JSON array of conversations with 'messages' field containing an array of message objects with 'role' and 'content'."
+        elif dataset_type == DatasetType.CLASSIFICATION:
+            return f"{base_prompt}Format as a JSON array of classification examples with 'text' and 'label' fields."
+        
+        return f"{base_prompt}Provide output as a JSON array of objects."
 
     def _format_response(self, result: Dict, dataset_type: DatasetType) -> List[Dict]:
         choices = result.get("choices", [])

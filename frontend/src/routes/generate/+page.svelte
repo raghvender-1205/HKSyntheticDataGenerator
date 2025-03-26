@@ -476,25 +476,38 @@
     }
 
     try {
+      // Parse all JSON content from the response
+      const allQAPairs = generatedData.reduce((acc: any[], item: any) => {
+        try {
+          // Extract the JSON string from the content field
+          const jsonStr = item.content.replace(/```json\n|\n```/g, '');
+          const parsedData = JSON.parse(jsonStr);
+          return [...acc, ...parsedData];
+        } catch (error) {
+          console.error('Error parsing JSON content:', error);
+          return acc;
+        }
+      }, []);
+
       // Convert the data to a string based on the format
       let content = '';
       let filename = 'synthetic_data';
       
       if (formData.dataConfig.format === 'qa') {
         // Format as Q&A pairs
-        content = generatedData.map((item: any) => 
+        content = allQAPairs.map((item: any) => 
           `Question: ${item.question}\nAnswer: ${item.answer}\n\n`
         ).join('');
         filename += '_qa.txt';
       } else if (formData.dataConfig.format === 'instructionResponse') {
         // Format as instruction-response pairs
-        content = generatedData.map((item: any) => 
+        content = allQAPairs.map((item: any) => 
           `Instruction: ${item.instruction}\nResponse: ${item.response}\n\n`
         ).join('');
         filename += '_instruction_response.txt';
       } else {
         // Default to JSON format
-        content = JSON.stringify(generatedData, null, 2);
+        content = JSON.stringify(allQAPairs, null, 2);
         filename += '.json';
       }
 

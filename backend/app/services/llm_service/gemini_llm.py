@@ -78,15 +78,26 @@ class GeminiLLMService(BaseLLMService):
             raise Exception(f"Gemini API error: {str(e)}")
 
     def _create_prompt(self, base_data: List[Dict], dataset_type: DatasetType, sample_size: int) -> str:
-        base_prompt = f"Generate {sample_size} synthetic {dataset_type.value} examples based on: {base_data}"
+        base_prompt = f"""Generate {sample_size} unique and diverse synthetic {dataset_type.value} examples based on the following content. 
+Each example should be distinct and cover different aspects of the content. Avoid repeating similar questions or topics.
+Content: {json.dumps(base_data)}
+
+Important guidelines:
+1. Each example must be unique and different from others
+2. Cover a wide range of topics and aspects from the content
+3. Vary the complexity and depth of questions
+4. Ensure answers are accurate and based on the provided content
+5. Format the output as a JSON array of objects
+
+"""
         
         # Add specific formatting instructions
         if dataset_type == DatasetType.QA:
-            return f"{base_prompt}\nReturn as a JSON object in this format: {{\"question\": \"...\", \"answer\": \"...\"}}"
+            return f"{base_prompt}Return as a JSON array of objects in this format: [{{\"question\": \"...\", \"answer\": \"...\"}}]"
         elif dataset_type == DatasetType.INSTRUCTION:
-            return f"{base_prompt}\nReturn as a JSON object in this format: {{\"instruction\": \"...\", \"response\": \"...\"}}"
+            return f"{base_prompt}Return as a JSON array of objects in this format: [{{\"instruction\": \"...\", \"response\": \"...\"}}]"
         elif dataset_type == DatasetType.CONVERSATION:
-            return f"{base_prompt}\nReturn as a JSON object with conversation turns in this format: {{\"conversation\": [{{\"role\": \"user\", \"content\": \"...\"}}]}}"
+            return f"{base_prompt}Return as a JSON array of objects with conversation turns in this format: [{{\"conversation\": [{{\"role\": \"user\", \"content\": \"...\"}}]}}]"
         
         return base_prompt
     
