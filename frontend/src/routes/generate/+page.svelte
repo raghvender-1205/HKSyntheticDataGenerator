@@ -9,6 +9,7 @@
   let loading = false;
   let error: string | null = null;
   let success = false;
+  let generatedData: any = null;  // Store the generated data
   
   // Settings
   let settings = {
@@ -319,6 +320,7 @@
       const result = await response.json();
       console.log('Generated data:', result);
       success = true;
+      generatedData = result.data;  // Store the generated data
       
       if (result.data && result.data.length > 0) {
         ToastManager.show('Data generated successfully', 'success');
@@ -428,6 +430,7 @@
       console.log('Generated data:', result);
       
       success = true;
+      generatedData = result.data;  // Store the generated data
       ToastManager.show('Data generated successfully', 'success');
       
     } catch (error) {
@@ -465,6 +468,53 @@
   ];
   
   $: isPDFSource = formData.dataSource.type === 'pdf';
+
+  async function downloadDataset() {
+    if (!generatedData) {
+      ToastManager.show('No data available to download', 'error');
+      return;
+    }
+
+    try {
+      // Convert the data to a string based on the format
+      let content = '';
+      let filename = 'synthetic_data';
+      
+      if (formData.dataConfig.format === 'qa') {
+        // Format as Q&A pairs
+        content = generatedData.map((item: any) => 
+          `Question: ${item.question}\nAnswer: ${item.answer}\n\n`
+        ).join('');
+        filename += '_qa.txt';
+      } else if (formData.dataConfig.format === 'instructionResponse') {
+        // Format as instruction-response pairs
+        content = generatedData.map((item: any) => 
+          `Instruction: ${item.instruction}\nResponse: ${item.response}\n\n`
+        ).join('');
+        filename += '_instruction_response.txt';
+      } else {
+        // Default to JSON format
+        content = JSON.stringify(generatedData, null, 2);
+        filename += '.json';
+      }
+
+      // Create a blob and download
+      const blob = new Blob([content], { type: 'text/plain' });
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      window.URL.revokeObjectURL(url);
+      document.body.removeChild(a);
+
+      ToastManager.show('Dataset downloaded successfully', 'success');
+    } catch (error) {
+      console.error('Error downloading dataset:', error);
+      ToastManager.show('Failed to download dataset', 'error');
+    }
+  }
 </script>
 
 <svelte:head>
@@ -484,8 +534,8 @@
         <p><strong>Success!</strong> Your synthetic data has been generated.</p>
       </div>
       <div class="mt-4 flex">
-        <button class="btn btn-primary mr-2">Download Dataset</button>
-        <button class="btn btn-secondary" on:click={() => { success = false; currentStep = 0; }}>Generate Another</button>
+        <button class="btn btn-primary mr-2" on:click={downloadDataset}>Download Dataset</button>
+        <button class="btn btn-secondary" on:click={() => { success = false; currentStep = 0; generatedData = null; }}>Generate Another</button>
       </div>
     </div>
   {:else}
