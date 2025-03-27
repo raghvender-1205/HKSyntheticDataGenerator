@@ -10,6 +10,9 @@
   let error: string | null = null;
   let success = false;
   let generatedData: any = null;  // Store the generated data
+  let progress = 0;
+  let totalBatches = 0;
+  let currentBatch = 0;
   
   // Settings
   let settings = {
@@ -62,6 +65,7 @@
     prompt: string;
     includeSource: boolean;
     count: number;
+    downloadFormat: string;
   }
 
   let formData: FormData = {
@@ -96,7 +100,8 @@
     name: '',
     prompt: '',
     includeSource: true,
-    count: 10
+    count: 10,
+    downloadFormat: 'json'
   };
   
   // File upload state
@@ -541,27 +546,52 @@
       // Convert the data to a string based on the format
       let content = '';
       let filename = 'synthetic_data';
+      let mimeType = 'text/plain';
       
-      if (formData.dataConfig.format === 'qa') {
-        // Format as Q&A pairs
-        content = allQAPairs.map((item: any) => 
-          `Question: ${item.question}\nAnswer: ${item.answer}\n\n`
-        ).join('');
-        filename += '_qa.txt';
-      } else if (formData.dataConfig.format === 'instructionResponse') {
-        // Format as instruction-response pairs
-        content = allQAPairs.map((item: any) => 
-          `Instruction: ${item.instruction}\nResponse: ${item.response}\n\n`
-        ).join('');
-        filename += '_instruction_response.txt';
-      } else {
-        // Default to JSON format
+      if (formData.downloadFormat === 'json') {
         content = JSON.stringify(allQAPairs, null, 2);
         filename += '.json';
+        mimeType = 'application/json';
+      } else if (formData.downloadFormat === 'txt') {
+        if (formData.dataConfig.format === 'qa') {
+          // Format as Q&A pairs
+          content = allQAPairs.map((item: any) => 
+            `Question: ${item.question}\nAnswer: ${item.answer}\n\n`
+          ).join('');
+          filename += '_qa.txt';
+        } else if (formData.dataConfig.format === 'instructionResponse') {
+          // Format as instruction-response pairs
+          content = allQAPairs.map((item: any) => 
+            `Instruction: ${item.instruction}\nResponse: ${item.response}\n\n`
+          ).join('');
+          filename += '_instruction_response.txt';
+        } else {
+          // Default to JSON format if format is not recognized
+          content = JSON.stringify(allQAPairs, null, 2);
+          filename += '.json';
+          mimeType = 'application/json';
+        }
+      } else if (formData.downloadFormat === 'csv') {
+        // Convert to CSV format
+        const headers = Object.keys(allQAPairs[0] || {});
+        const csvRows = [headers.join(',')];
+        
+        for (const item of allQAPairs) {
+          const row = headers.map(header => {
+            const value = item[header] || '';
+            // Escape commas and quotes in the value
+            return `"${String(value).replace(/"/g, '""')}"`;
+          });
+          csvRows.push(row.join(','));
+        }
+        
+        content = csvRows.join('\n');
+        filename += '.csv';
+        mimeType = 'text/csv';
       }
 
       // Create a blob and download
-      const blob = new Blob([content], { type: 'text/plain' });
+      const blob = new Blob([content], { type: mimeType });
       const url = window.URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
@@ -575,6 +605,64 @@
     } catch (error) {
       console.error('Error downloading dataset:', error);
       ToastManager.show('Failed to download dataset', 'error');
+    }
+  }
+
+  async function generateData() {
+    loading = true;
+    progress = 0;
+    currentBatch = 0;
+    
+    try {
+        const response = await fetch('http://localhost:8000/api/v1/generate', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+                data_source_config: {
+                    type: formData.dataSource.type,
+                    source_path: "data/uploads",
+                    parameters: {
+                        extract_metadata: "true",
+                        extract_layout: "true"
+                    }
+                },
+                llm_config: {
+                    type: formData.llmConfig.provider,
+                    model: formData.llmConfig.model,
+                    temperature: formData.llmConfig.temperature,
+                    max_tokens: formData.llmConfig.maxTokens,
+                    custom_endpoint: formData.llmConfig.customEndpoint,
+                    model_name: formData.llmConfig.modelName,
+                    top_p: formData.llmConfig.topP,
+                    top_k: formData.llmConfig.topK,
+                    api_base: formData.llmConfig.apiBase
+                },
+                dataset_type: formData.dataConfig.format,
+                sample_size: formData.dataConfig.count,
+                output_format: "json"
+            })
+        });
+
+        if (!response.ok) {
+            throw new Error('Failed to generate data');
+        }
+
+        const result = await response.json();
+        generatedData = result.data;
+        
+        // Update progress information
+        totalBatches = result.metadata.total_batches;
+        currentBatch = totalBatches;
+        progress = 100;
+        
+        ToastManager.show('Data generated successfully!', 'success');
+    } catch (error) {
+        console.error('Error generating data:', error);
+        ToastManager.show(`Error: ${error instanceof Error ? error.message : 'Failed to generate data'}`, 'error');
+    } finally {
+        loading = false;
     }
   }
 </script>
@@ -595,8 +683,18 @@
         </svg>
         <p><strong>Success!</strong> Your synthetic data has been generated.</p>
       </div>
-      <div class="mt-4 flex">
-        <button class="btn btn-primary mr-2" on:click={downloadDataset}>Download Dataset</button>
+      <div class="mt-4 flex flex-col space-y-4">
+        <div class="flex items-center space-x-4">
+          <select 
+            bind:value={formData.downloadFormat} 
+            class="input w-32"
+          >
+            <option value="json">JSON</option>
+            <option value="txt">TXT</option>
+            <option value="csv">CSV</option>
+          </select>
+          <button class="btn btn-primary" on:click={downloadDataset}>Download Dataset</button>
+        </div>
         <button class="btn btn-secondary" on:click={() => { success = false; currentStep = 0; generatedData = null; }}>Generate Another</button>
       </div>
     </div>
@@ -1018,6 +1116,25 @@
         {/if}
       </div>
     </div>
+
+    {#if loading}
+      <div class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+        <div class="bg-white p-6 rounded-lg shadow-xl max-w-md w-full">
+          <h3 class="text-lg font-semibold mb-4">Generating Data</h3>
+          <div class="space-y-4">
+            <div class="w-full bg-gray-200 rounded-full h-2.5">
+              <div class="bg-primary-600 h-2.5 rounded-full transition-all duration-300" style="width: {progress}%"></div>
+            </div>
+            <p class="text-sm text-gray-600">
+              Processing batch {currentBatch} of {totalBatches}
+            </p>
+            <p class="text-sm text-gray-500">
+              This may take a few minutes...
+            </p>
+          </div>
+        </div>
+      </div>
+    {/if}
   {/if}
 </div>
 

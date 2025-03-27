@@ -1,6 +1,8 @@
 from datetime import datetime
 from fastapi import HTTPException, Depends
 from uuid import uuid4
+import math
+import asyncio
 
 from app.schemas import SyntheticDataRequest, SyntheticDataResponse
 from app.services.data_source import CSVDataSource, DBDataSource, PDFDataSource, JSONDataSource
@@ -100,22 +102,47 @@ class SyntheticDataController:
             else:
                 raise HTTPException(400, "Unsupported LLM type")
 
-            # Generate data
+            # Get base data
             base_data = await data_source.fetch_data(limit=10)  # TODO: Send from request
-            synthetic_data = await llm.generate_synthetic_data(
-                base_data,
-                request.sample_size,
-                request.dataset_type
-            )
+            
+            # Calculate batch size based on token limit
+            # Assuming each item in base_data contributes roughly 100 tokens
+            # and we want to leave room for the prompt and completion
+            max_tokens_per_batch = 8000  # Conservative limit to leave room for prompt and completion
+            items_per_batch = max_tokens_per_batch // 100  # Approximate items per batch
+            
+            # Calculate number of batches needed
+            total_samples = request.sample_size
+            num_batches = math.ceil(total_samples / items_per_batch)
+            
+            # Generate data in batches
+            all_synthetic_data = []
+            for batch_num in range(num_batches):
+                batch_size = min(items_per_batch, total_samples - len(all_synthetic_data))
+                if batch_size <= 0:
+                    break
+                    
+                batch_data = await llm.generate_synthetic_data(
+                    base_data,
+                    batch_size,
+                    request.dataset_type
+                )
+                all_synthetic_data.extend(batch_data)
+                
+                # Add a small delay between batches to avoid rate limiting
+                if batch_num < num_batches - 1:
+                    await asyncio.sleep(1)
 
             # Create response
             response = SyntheticDataResponse(
-                data=synthetic_data,
+                data=all_synthetic_data,
                 metadata={
                     "source_type": data_source_type,
                     "llm_type": llm_type,
                     "dataset_type": request.dataset_type,
-                    "generated_at": datetime.utcnow().isoformat()
+                    "generated_at": datetime.utcnow().isoformat(),
+                    "total_batches": num_batches,
+                    "items_per_batch": items_per_batch
                 },
                 saved=False
             )

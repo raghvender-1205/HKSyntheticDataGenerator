@@ -25,4 +25,3 @@ class CSVDataSource(BaseDataSource):
         df = pd.read_csv(self.config.connection_string)
 
         return {"columns": list(df.columns), "types": df.dtypes.to_dict()}
-        return {"columns": list(df.columns), "types": df.dtypes.to_dict()}
