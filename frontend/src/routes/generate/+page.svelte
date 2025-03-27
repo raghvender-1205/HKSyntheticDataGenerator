@@ -547,6 +547,11 @@
           return acc;
         }
       }, []);
+      
+      if (allQAPairs.length === 0) {
+        ToastManager.show('No data available to download', 'error');
+        return;
+      }
 
       // Convert the data to a string based on the format
       let content = '';
@@ -564,7 +569,7 @@
             `Question: ${item.question}\nAnswer: ${item.answer}\n\n`
           ).join('');
           filename += '_qa.txt';
-        } else if (formData.dataConfig.format === 'instructionResponse') {
+        } else if (formData.dataConfig.format === 'instruction') {
           // Format as instruction-response pairs
           content = allQAPairs.map((item: any) => 
             `Instruction: ${item.instruction}\nResponse: ${item.response}\n\n`
