@@ -4,6 +4,7 @@ import json
 
 from app.services.base import BaseLLMService
 from app.models import DatasetType
+from app.services.llm_service.prompts import get_base_prompt, get_dataset_specific_prompt
 
 
 class GeminiLLMService(BaseLLMService):
@@ -78,28 +79,8 @@ class GeminiLLMService(BaseLLMService):
             raise Exception(f"Gemini API error: {str(e)}")
 
     def _create_prompt(self, base_data: List[Dict], dataset_type: DatasetType, sample_size: int) -> str:
-        base_prompt = f"""Generate {sample_size} unique and diverse synthetic {dataset_type.value} examples based on the following content. 
-Each example should be distinct and cover different aspects of the content. Avoid repeating similar questions or topics.
-Content: {json.dumps(base_data)}
-
-Important guidelines:
-1. Each example must be unique and different from others
-2. Cover a wide range of topics and aspects from the content
-3. Vary the complexity and depth of questions
-4. Ensure answers are accurate and based on the provided content
-5. Format the output as a JSON array of objects
-
-"""
-        
-        # Add specific formatting instructions
-        if dataset_type == DatasetType.QA:
-            return f"{base_prompt}Return as a JSON array of objects in this format: [{{\"question\": \"...\", \"answer\": \"...\"}}]"
-        elif dataset_type == DatasetType.INSTRUCTION:
-            return f"{base_prompt}Return as a JSON array of objects in this format: [{{\"instruction\": \"...\", \"response\": \"...\"}}]"
-        elif dataset_type == DatasetType.CONVERSATION:
-            return f"{base_prompt}Return as a JSON array of objects with conversation turns in this format: [{{\"conversation\": [{{\"role\": \"user\", \"content\": \"...\"}}]}}]"
-        
-        return base_prompt
+        base_prompt = get_base_prompt(base_data, dataset_type, sample_size)
+        return get_dataset_specific_prompt(base_prompt, dataset_type)
     
     def _parse_text_response(self, text: str, dataset_type: DatasetType) -> Dict:
         """Parse text response when JSON parsing fails"""

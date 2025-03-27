@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { onMount } from 'svelte';
+  import { onMount, onDestroy } from 'svelte';
   import { writable } from 'svelte/store';
   import Spinner from '$lib/components/Spinner.svelte';
   import { ToastManager } from '$lib/components/ToastManager.js';
@@ -13,6 +13,9 @@
   let progress = 0;
   let totalBatches = 0;
   let currentBatch = 0;
+  let batchProgress = 0;
+  let estimatedTimeRemaining = '';
+  let startTime: number | null = null;
   
   // Settings
   let settings = {
@@ -109,6 +112,8 @@
   let isFileUploading = false;
   let uploadProgress = 0;
   let pdfFileName = '';
+  
+  let progressInterval: number | null = null;
   
   onMount(async () => {
     // Load settings
@@ -612,6 +617,8 @@
     loading = true;
     progress = 0;
     currentBatch = 0;
+    batchProgress = 0;
+    startTime = Date.now();
     
     try {
         const response = await fetch('http://localhost:8000/api/v1/generate', {
@@ -656,13 +663,53 @@
         totalBatches = result.metadata.total_batches;
         currentBatch = totalBatches;
         progress = 100;
+        batchProgress = 100;
         
         ToastManager.show('Data generated successfully!', 'success');
+    
     } catch (error) {
         console.error('Error generating data:', error);
         ToastManager.show(`Error: ${error instanceof Error ? error.message : 'Failed to generate data'}`, 'error');
     } finally {
         loading = false;
+        startTime = null;
+    }
+  }
+
+  // Function to update estimated time remaining
+  function updateEstimatedTime() {
+    if (!startTime || progress === 0) return;
+    
+    const elapsedTime = (Date.now() - startTime) / 1000; // in seconds
+    const timePerBatch = elapsedTime / currentBatch;
+    const remainingBatches = totalBatches - currentBatch;
+    const estimatedSeconds = Math.round(timePerBatch * remainingBatches);
+    
+    if (estimatedSeconds < 60) {
+        estimatedTimeRemaining = `${estimatedSeconds} seconds`;
+    } else {
+        const minutes = Math.floor(estimatedSeconds / 60);
+        const seconds = estimatedSeconds % 60;
+        estimatedTimeRemaining = `${minutes} minute${minutes !== 1 ? 's' : ''} ${seconds} seconds`;
+    }
+  }
+
+  // Start progress updates when loading begins
+  $: if (loading && startTime) {
+    progressInterval = window.setInterval(updateEstimatedTime, 1000);
+  }
+
+  // Cleanup interval on component destroy or when loading stops
+  onDestroy(() => {
+    if (progressInterval) {
+        clearInterval(progressInterval);
+    }
+  });
+
+  $: if (!loading) {
+    if (progressInterval) {
+        clearInterval(progressInterval);
+        progressInterval = null;
     }
   }
 </script>
@@ -1119,18 +1166,88 @@
 
     {#if loading}
       <div class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-        <div class="bg-white p-6 rounded-lg shadow-xl max-w-md w-full">
-          <h3 class="text-lg font-semibold mb-4">Generating Data</h3>
-          <div class="space-y-4">
-            <div class="w-full bg-gray-200 rounded-full h-2.5">
-              <div class="bg-primary-600 h-2.5 rounded-full transition-all duration-300" style="width: {progress}%"></div>
+        <div class="bg-white p-8 rounded-lg shadow-xl max-w-md w-full mx-4">
+          <div class="flex items-center justify-between mb-6">
+            <h3 class="text-xl font-semibold text-secondary-800">Generating Synthetic Data</h3>
+            <div class="animate-spin h-6 w-6 text-primary-600">
+              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+              </svg>
             </div>
-            <p class="text-sm text-gray-600">
-              Processing batch {currentBatch} of {totalBatches}
-            </p>
-            <p class="text-sm text-gray-500">
-              This may take a few minutes...
-            </p>
+          </div>
+
+          <div class="space-y-6">
+            <!-- Overall Progress -->
+            <div>
+              <div class="flex justify-between mb-2">
+                <span class="text-sm font-medium text-secondary-700">Overall Progress</span>
+                <span class="text-sm font-medium text-primary-600">{progress}%</span>
+              </div>
+              <div class="w-full bg-gray-100 rounded-full h-3">
+                <div 
+                  class="bg-primary-600 h-3 rounded-full transition-all duration-500 ease-out" 
+                  style="width: {progress}%"
+                ></div>
+              </div>
+            </div>
+
+            <!-- Batch Progress -->
+            <div>
+              <div class="flex justify-between mb-2">
+                <span class="text-sm font-medium text-secondary-700">Current Batch</span>
+                <span class="text-sm font-medium text-primary-600">{currentBatch} of {totalBatches}</span>
+              </div>
+              <div class="w-full bg-gray-100 rounded-full h-2">
+                <div 
+                  class="bg-primary-500 h-2 rounded-full transition-all duration-500 ease-out" 
+                  style="width: {batchProgress}%"
+                ></div>
+              </div>
+            </div>
+
+            <!-- Status Information -->
+            <div class="bg-secondary-50 rounded-lg p-4 space-y-3">
+              <div class="flex items-center space-x-2">
+                <svg class="h-5 w-5 text-primary-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"></path>
+                </svg>
+                <span class="text-sm font-medium text-secondary-700">Processing Status</span>
+              </div>
+              <p class="text-sm text-secondary-600">
+                {#if currentBatch === 0}
+                  Initializing generation process...
+                {:else if currentBatch < totalBatches}
+                  Processing batch {currentBatch} of {totalBatches}
+                {:else}
+                  Finalizing results...
+                {/if}
+              </p>
+              {#if estimatedTimeRemaining}
+                <div class="flex items-center space-x-2">
+                  <svg class="h-5 w-5 text-primary-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                  </svg>
+                  <span class="text-sm text-secondary-600">Estimated time remaining: {estimatedTimeRemaining}</span>
+                </div>
+              {/if}
+            </div>
+
+            <!-- Tips -->
+            <div class="bg-blue-50 rounded-lg p-4">
+              <div class="flex items-center space-x-2 mb-2">
+                <svg class="h-5 w-5 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                </svg>
+                <span class="text-sm font-medium text-blue-700">Tips</span>
+              </div>
+              <ul class="text-sm text-blue-600 space-y-1">
+                <li>• Generation time varies based on your configuration</li>
+                <li>• Larger sample sizes will take longer to process</li>
+                <li>• You can safely close this window - generation will continue</li>
+                <li>• Results will be available for download once complete</li>
+              </ul>
+            </div>
           </div>
         </div>
       </div>
